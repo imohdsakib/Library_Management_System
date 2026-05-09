@@ -1,0 +1,9 @@
+backend/node_modules/
+backend/.env
+backend/mysql-portable/data/
+backend/mysql-portable/logs/
+backend/mysql-portable/mysql-8.4.8-winx64.zip
+.venv/
+report_assets/
+*.docx
+tools/

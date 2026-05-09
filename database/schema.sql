@@ -1,0 +1,48 @@
+CREATE DATABASE IF NOT EXISTS library_management;
+USE library_management;
+
+CREATE TABLE IF NOT EXISTS admins (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  email VARCHAR(190) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  phone VARCHAR(30) NULL
+);
+
+CREATE TABLE IF NOT EXISTS students (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  student_id VARCHAR(60) NOT NULL UNIQUE,
+  email VARCHAR(190) NOT NULL UNIQUE,
+  phone VARCHAR(30) NULL,
+  course VARCHAR(120) NULL,
+  created_at DATE NOT NULL DEFAULT (CURRENT_DATE),
+  blocked TINYINT(1) NOT NULL DEFAULT 0,
+  deleted_at DATE NULL
+);
+
+CREATE TABLE IF NOT EXISTS books (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  author VARCHAR(200) NOT NULL,
+  isbn VARCHAR(80) NOT NULL UNIQUE,
+  category VARCHAR(120) NOT NULL,
+  total_copies INT NOT NULL DEFAULT 0,
+  available_copies INT NOT NULL DEFAULT 0,
+  published_year INT NULL,
+  CHECK (total_copies >= 0),
+  CHECK (available_copies >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS issues (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  book_id INT NOT NULL,
+  student_id INT NOT NULL,
+  issue_date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  return_date DATE DEFAULT NULL,
+  status ENUM('issued', 'returned') NOT NULL DEFAULT 'issued',
+  fine INT NOT NULL DEFAULT 0,
+  CONSTRAINT fk_issue_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT fk_issue_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT ON UPDATE CASCADE
+);

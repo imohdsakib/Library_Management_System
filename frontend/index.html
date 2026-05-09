@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Library Management System</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<div class="app-shell">
+		<header class="topbar">
+			<h1>Library Management System</h1>
+			<div id="sessionPanel" class="session-panel hidden">
+				<span id="welcomeText"></span>
+				<button id="logoutBtn" class="btn btn-danger">Logout</button>
+			</div>
+		</header>
+
+		<main>
+			<section id="authSection" class="card auth-card">
+				<div class="tabs">
+					<button class="tab-btn active" data-tab="loginTab">Admin Login</button>
+					<button class="tab-btn" data-tab="adminRegisterTab">Admin Registration</button>
+				</div>
+
+				<div id="loginTab" class="tab-content active">
+					<div class="login-panel">
+						<div class="login-header">
+							<h2>Welcome Back</h2>
+							<p>Login as Admin to continue</p>
+						</div>
+						<form id="loginForm" class="form-grid login-form">
+							<label>Email Address
+								<input type="email" id="loginEmail" placeholder="Enter your email" required>
+							</label>
+							<label>Password
+								<input type="password" id="loginPassword" placeholder="Enter admin password" required>
+							</label>
+							<button type="submit" class="btn btn-primary login-btn">Login</button>
+						</form>
+					</div>
+				</div>
+
+				<div id="adminRegisterTab" class="tab-content">
+					<h2>Admin Registration</h2>
+					<form id="adminRegisterForm" class="form-grid">
+						<label>Full Name
+							<input type="text" id="adminRegName" required>
+						</label>
+						<label>Email
+							<input type="email" id="adminRegEmail" required>
+						</label>
+						
+						<label>Phone
+							<input type="text" id="adminRegPhone" required>
+						</label>
+                        <label>Password
+							<input type="password" id="adminRegPassword" minlength="4" required>
+						</label>
+						<button type="submit" class="btn btn-primary">Register Admin</button>
+					</form>
+				</div>
+			</section>
+
+			<section id="appSection" class="hidden">
+				<nav class="module-nav">
+					<button class="module-btn active" data-module="dashboardModule">Dashboard</button>
+					<button class="module-btn" data-module="userModule">User Management</button>
+					<button class="module-btn" data-module="bookModule">Book Management</button>
+					<button class="module-btn" data-module="issueModule">Issue & Return</button>
+					<button class="module-btn" data-module="reportModule">Reports</button>
+				</nav>
+
+				<section id="dashboardModule" class="module card active">
+					<h2>Simple Dashboard</h2>
+					<div class="stat-grid">
+						<article class="stat-card">
+							<h3>Total Books</h3>
+							<p id="dashTotalBooks">0</p>
+						</article>
+						<article class="stat-card">
+							<h3>Issued Books</h3>
+							<p id="dashIssuedBooks">0</p>
+						</article>
+						<article class="stat-card">
+							<h3>Overdue Books</h3>
+							<p id="dashOverdueBooks">0</p>
+						</article>
+						<article class="stat-card">
+							<h3>Total Fine</h3>
+							<p id="dashTotalFine">₹0</p>
+						</article>
+					</div>
+
+					<div class="chart-grid">
+						<div class="chart-card">
+							<h3>Book Availability Chart</h3>
+							<div id="availabilityChart" class="bar-chart"></div>
+						</div>
+						<div class="chart-card">
+							<h3>Issue Status Chart</h3>
+							<div id="statusChart" class="bar-chart"></div>
+						</div>
+					</div>
+				</section>
+
+				<section id="userModule" class="module card">
+					<h2>User Management</h2>
+					<div id="studentRegisterPanel">
+						<h3>Student Registration (Admin Only)</h3>
+						<form id="studentRegisterForm" class="form-grid compact">
+							<label>Full Name
+								<input type="text" id="regName" required>
+							</label>
+							<label>Student ID
+								<input type="text" id="regStudentId" minlength="3" required>
+							</label>
+							<label>Course
+								<input type="text" id="regCourse" required>
+							</label>
+							<label>Email
+								<input type="email" id="regEmail" required>
+							</label>
+							<label>Phone
+								<input type="text" id="regPhone" required>
+							</label>
+							<button type="submit" class="btn btn-primary">Register Student</button>
+						</form>
+					</div>
+
+					<form id="profileUpdateForm" class="form-grid compact">
+						<h3>Update Student Detail</h3>
+						<label>Select Student
+							<select id="updTargetStudent" required>
+								<option value="">Select a student</option>
+							</select>
+						</label>
+						<label>Name
+							<input type="text" id="updName" required>
+						</label>
+						<label>Student ID
+							<input type="text" id="updStudentId" minlength="3">
+						</label>
+						<label>Phone
+							<input type="text" id="updPhone" required>
+						</label>
+						<label>Email
+							<input type="email" id="updEmail" required>
+						</label>
+						<label>Course
+							<input type="text" id="updCourse">
+						</label>
+						<div class="btn-row">
+							<button type="submit" class="btn btn-secondary">Update</button>
+							<button type="reset" id="clearProfileForm" class="btn btn-light">Clear</button>
+						</div>
+					</form>
+
+					<!-- Admin update form (admins only) -->
+					<form id="adminUpdateForm" class="form-grid compact">
+						<h3>Update Admin Profile</h3>
+						<label>Name
+							<input type="text" id="adminUpdName" required>
+						</label>
+						<label>Email
+							<input type="email" id="adminUpdEmail" required>
+						</label>
+						<label>Phone
+							<input type="text" id="adminUpdPhone">
+						</label>
+						<label>New Password
+							<input type="password" id="adminUpdPassword" minlength="4">
+						</label>
+						<div class="btn-row">
+							<button type="submit" class="btn btn-secondary">Update Admin</button>
+							<button type="reset" id="clearAdminForm" class="btn btn-light">Clear</button>
+						</div>
+					</form>
+
+					<div id="allUsersPanel" class="mt-2">
+						<h3>All Students</h3>
+						<div class="table-wrap">
+							<table>
+								<thead>
+									<tr>
+										<th>ID</th>
+										<th>Name</th>
+										<th>Email</th>
+										<th>Role</th>
+										<th>Student ID</th>
+										<th>Phone</th>
+										<th>Course</th>
+									</tr>
+								</thead>
+								<tbody id="usersTableBody"></tbody>
+							</table>
+						</div>
+					</div>
+				</section>
+
+				<section id="bookModule" class="module card">
+					<h2>Book Management</h2>
+					<div id="bookCrudPanel">
+						<form id="bookForm" class="form-grid compact">
+							<h3>Add / Update Book</h3>
+							<input type="hidden" id="bookId">
+							<label>Title
+								<input type="text" id="bookTitle" required>
+							</label>
+							<label>Author
+								<input type="text" id="bookAuthor" required>
+							</label>
+							<label>ISBN
+								<input type="text" id="bookIsbn" required>
+							</label>
+							<label>Category
+								<input type="text" id="bookCategory" required>
+							</label>
+							<label>Total Copies
+								<input type="number" id="bookTotalCopies" min="1" required>
+							</label>
+							<label>Published Year
+								<input type="number" id="bookYear" min="1500" max="2100" required>
+							</label>
+							<div class="btn-row">
+								<button type="submit" class="btn btn-primary">Save Book</button>
+								<button type="button" id="resetBookForm" class="btn btn-light">Reset</button>
+							</div>
+						</form>
+					</div>
+
+					<div class="search-panel">
+						<h3>Search Book (Title/Author)</h3>
+						<input type="text" id="bookSearch" placeholder="Search by title or author">
+					</div>
+
+					<div class="table-wrap mt-1">
+						<table>
+							<thead>
+								<tr>
+									<th>ID</th>
+									<th>Title</th>
+									<th>Author</th>
+									<th>ISBN</th>
+									<th>Category</th>
+									<th>Availability</th>
+									<th id="bookActionHeader">Actions</th>
+								</tr>
+							</thead>
+							<tbody id="booksTableBody"></tbody>
+						</table>
+					</div>
+				</section>
+
+				<section id="issueModule" class="module card">
+					<h2>Issue & Return Module</h2>
+					<form id="issueForm" class="form-grid compact">
+						<h3>Issue Book</h3>
+						<label>Book
+							<input type="text" id="issueBookSearch" list="issueBookOptions" placeholder="Search and select book" autocomplete="off" required>
+							<datalist id="issueBookOptions"></datalist>
+							<input type="hidden" id="issueBookId">
+						</label>
+						<label>Student Name
+							<input type="text" id="issueStudentNameSearch" list="issueStudentNameOptions" placeholder="Search and select student name" autocomplete="off" required>
+							<datalist id="issueStudentNameOptions"></datalist>
+							<input type="hidden" id="issueStudentNameId">
+						</label>
+						<label>Student ID
+							<input type="text" id="issueStudentIdSearch" list="issueStudentIdOptions" placeholder="Search and select student ID" autocomplete="off" required>
+							<datalist id="issueStudentIdOptions"></datalist>
+							<input type="hidden" id="issueStudentIdValue">
+						</label>
+						<label>Due Date
+							<input type="date" id="issueDueDate" required>
+						</label>
+						<button type="submit" class="btn btn-primary">Issue Book</button>
+					</form>
+
+					<div class="table-wrap mt-2">
+						<table>
+							<thead>
+								<tr>
+									<th>Issue ID</th>
+									<th>Book</th>
+									<th>Student</th>
+									<th>Student ID</th>
+									<th>Issue Date</th>
+									<th>Due Date</th>
+									<th>Return Date</th>
+									<th>Status</th>
+									<th>Fine</th>
+									<th>Action</th>
+								</tr>
+							</thead>
+							<tbody id="issuesTableBody"></tbody>
+						</table>
+					</div>
+				</section>
+
+				<section id="reportModule" class="module card">
+					<h2>Reports & Dashboard</h2>
+					<div class="report-grid">
+						<article class="report-card">
+							<h3>Total Book Count</h3>
+							<p id="reportTotalBooks">0</p>
+						</article>
+						<article class="report-card">
+							<h3>Total Issued Books</h3>
+							<p id="reportIssuedCount">0</p>
+						</article>
+						<article class="report-card">
+							<h3>Overdue Count</h3>
+							<p id="reportOverdueCount">0</p>
+						</article>
+						<article class="report-card">
+							<h3>Total Fine Report</h3>
+							<p id="reportFineTotal">₹0</p>
+						</article>
+					</div>
+
+					<div class="report-lists">
+						<div>
+							<h3>Issued Book List</h3>
+							<ul id="issuedList"></ul>
+						</div>
+						<div>
+							<h3>Overdue Book Report</h3>
+							<ul id="overdueList"></ul>
+						</div>
+						<div>
+							<h3>Fine Report</h3>
+							<ul id="fineList"></ul>
+						</div>
+						<div>
+							<h3>Blocked Students</h3>
+							<ul id="blockedList"></ul>
+						</div>
+					</div>
+				</section>
+			</section>
+		</main>
+	</div>
+
+	<p id="toast" class="toast hidden"></p>
+	<script src="script.js"></script>
+</body>
+</html>
