@@ -16,6 +16,9 @@ const appState = {
     authToken: "",
     apiBaseUrl: localStorage.getItem(STORAGE_KEYS.apiBaseUrl) || DEFAULT_API_BASE_URL,
     currentBookFilter: "",
+    currentUpdateBookFilter: "",
+    currentUpdateStudentFilter: "",
+    currentStudentFilter: "",
     currentModuleId: "dashboardModule"
 };
 
@@ -35,12 +38,15 @@ const elements = {
     loginEmail: document.getElementById("loginEmail"),
     loginPassword: document.getElementById("loginPassword"),
 
+    // student login removed
+
     studentRegisterForm: document.getElementById("studentRegisterForm"),
     regName: document.getElementById("regName"),
     regEmail: document.getElementById("regEmail"),
     regStudentId: document.getElementById("regStudentId"),
     regPhone: document.getElementById("regPhone"),
     regCourse: document.getElementById("regCourse"),
+    regPassword: document.getElementById("regPassword"),
 
     adminRegisterForm: document.getElementById("adminRegisterForm"),
     adminRegName: document.getElementById("adminRegName"),
@@ -60,6 +66,10 @@ const elements = {
     updCourse: document.getElementById("updCourse"),
     updEmail: document.getElementById("updEmail"),
     updStudentId: document.getElementById("updStudentId"),
+    updPassword: document.getElementById("updPassword"),
+    updateStudentSearch: document.getElementById("updateStudentSearch"),
+
+    userSearch: document.getElementById("userSearch"),
 
     usersTableBody: document.getElementById("usersTableBody"),
     allUsersPanel: document.getElementById("allUsersPanel"),
@@ -69,7 +79,6 @@ const elements = {
     bookId: document.getElementById("bookId"),
     bookTitle: document.getElementById("bookTitle"),
     bookAuthor: document.getElementById("bookAuthor"),
-    bookIsbn: document.getElementById("bookIsbn"),
     bookCategory: document.getElementById("bookCategory"),
     bookTotalCopies: document.getElementById("bookTotalCopies"),
     bookYear: document.getElementById("bookYear"),
@@ -78,6 +87,8 @@ const elements = {
     booksTableBody: document.getElementById("booksTableBody"),
     bookSearch: document.getElementById("bookSearch"),
     bookActionHeader: document.getElementById("bookActionHeader"),
+    booksCount: document.getElementById("booksCount"),
+    bookAddBtn: document.getElementById("bookAddBtn"),
 
     issueForm: document.getElementById("issueForm"),
     issueBookSearch: document.getElementById("issueBookSearch"),
@@ -91,6 +102,7 @@ const elements = {
     issueStudentIdOptions: document.getElementById("issueStudentIdOptions"),
     issueDueDate: document.getElementById("issueDueDate"),
     issuesTableBody: document.getElementById("issuesTableBody"),
+    clearIssueForm: document.getElementById('clearIssueForm'),
 
     dashTotalBooks: document.getElementById("dashTotalBooks"),
     dashIssuedBooks: document.getElementById("dashIssuedBooks"),
@@ -107,12 +119,55 @@ const elements = {
     overdueList: document.getElementById("overdueList"),
     fineList: document.getElementById("fineList"),
     blockedList: document.getElementById("blockedList"),
+    // student dashboard elements
+    studentDashboard: document.getElementById("studentDashboard"),
+    studentProfileName: document.getElementById("studentProfileName"),
+    studentProfileId: document.getElementById("studentProfileId"),
+    studentProfileCourse: document.getElementById("studentProfileCourse"),
+    studentTotalIssued: document.getElementById("studentTotalIssued"),
+    studentDueCount: document.getElementById("studentDueCount"),
+    studentNextReturn: document.getElementById("studentNextReturn"),
+    studentTotalFine: document.getElementById("studentTotalFine"),
+    studentIssueHistory: document.getElementById("studentIssueHistory"),
+    reportListsWrap: document.getElementById("reportListsWrap"),
+    // student module elements
+    studentProfileModuleBtn: document.querySelector('.module-btn[data-module="studentProfileModule"]'),
+    studentIssuedModuleBtn: document.querySelector('.module-btn[data-module="studentIssuedModule"]'),
+    studentHistoryModuleBtn: document.querySelector('.module-btn[data-module="studentHistoryModule"]'),
+    studentProfileForm: document.getElementById('studentProfileForm'),
+    stuName: document.getElementById('stuName'),
+    stuStudentId: document.getElementById('stuStudentId'),
+    stuEmail: document.getElementById('stuEmail'),
+    stuPhone: document.getElementById('stuPhone'),
+    stuCourse: document.getElementById('stuCourse'),
+    stuNewPassword: document.getElementById('stuNewPassword'),
+    studentIssuedTableBody: document.getElementById('studentIssuedTableBody'),
+    studentHistoryTableBody: document.getElementById('studentHistoryTableBody'),
 
     logoutBtn: document.getElementById("logoutBtn"),
+    darkModeToggle: document.getElementById("darkModeToggle"),
     tabButtons: document.querySelectorAll(".tab-btn"),
     tabContents: document.querySelectorAll(".tab-content"),
     moduleButtons: document.querySelectorAll(".module-btn"),
     modules: document.querySelectorAll(".module")
+    ,userTabButtons: document.querySelectorAll(".user-tab-btn"),
+    userTabPanels: document.querySelectorAll(".user-tab-panel")
+    ,issueTabButtons: document.querySelectorAll(".issue-tab-btn"),
+    issueTabPanels: document.querySelectorAll(".issue-tab-panel")
+    ,bookTabButtons: document.querySelectorAll(".book-tab-btn"),
+    bookTabPanels: document.querySelectorAll(".book-tab-panel"),
+    updateBookSelect: document.getElementById("updateBookSelect"),
+    updateBookForm: document.getElementById("updateBookForm"),
+    updateBookId: document.getElementById("updateBookId"),
+    updateBookTitle: document.getElementById("updateBookTitle"),
+    updateBookAuthor: document.getElementById("updateBookAuthor"),
+    // ISBN removed from UI
+    updateBookCategory: document.getElementById("updateBookCategory"),
+    updateBookTotalCopies: document.getElementById("updateBookTotalCopies"),
+    updateBookYear: document.getElementById("updateBookYear"),
+    updateBookSearch: document.getElementById("updateBookSearch"),
+    updateBookSuggestions: document.getElementById("updateBookSuggestions"),
+    resetUpdateBookForm: document.getElementById("resetUpdateBookForm")
 };
 
 async function initApp() {
@@ -131,17 +186,111 @@ function bindEvents() {
         button.addEventListener("click", () => switchModule(button.dataset.module));
     });
 
+    // User-management internal tabs
+    if (elements.userTabButtons) {
+        elements.userTabButtons.forEach((btn) => {
+            btn.addEventListener("click", () => switchUserTab(btn.dataset.tab));
+        });
+    }
+
+    // Issue-module internal tabs
+    if (elements.issueTabButtons) {
+        elements.issueTabButtons.forEach((btn) => {
+            btn.addEventListener("click", () => switchIssueTab(btn.dataset.tab));
+        });
+    }
+
+    // Book-management internal tabs
+    if (elements.bookTabButtons) {
+        elements.bookTabButtons.forEach((btn) => {
+            btn.addEventListener("click", () => switchBookTab(btn.dataset.tab));
+        });
+    }
+
+    if (elements.updateBookSelect) {
+        elements.updateBookSelect.addEventListener("change", () => {
+            const bookId = elements.updateBookSelect.value;
+            if (!bookId) {
+                // clear update form
+                if (elements.updateBookForm) elements.updateBookForm.reset();
+                elements.updateBookId.value = "";
+                return;
+            }
+            const book = appState.books.find((b) => String(b.id) === String(bookId));
+            if (!book) return;
+            // populate update form
+            if (elements.updateBookId) elements.updateBookId.value = book.id;
+            if (elements.updateBookTitle) elements.updateBookTitle.value = book.title || "";
+            if (elements.updateBookAuthor) elements.updateBookAuthor.value = book.author || "";
+            // ISBN removed from UI
+            if (elements.updateBookCategory) elements.updateBookCategory.value = book.category || "";
+            if (elements.updateBookTotalCopies) elements.updateBookTotalCopies.value = book.totalCopies || 1;
+            if (elements.updateBookYear) elements.updateBookYear.value = book.publishedYear || new Date().getFullYear();
+        });
+    }
+    if (elements.clearIssueForm) {
+        elements.clearIssueForm.addEventListener('click', (e) => {
+            e.preventDefault();
+            resetIssueForm();
+            showToast('Issue form cleared.');
+        });
+    }
+
+    if (elements.updateBookForm) {
+        elements.updateBookForm.addEventListener("submit", handleUpdateBook);
+    }
+
+    if (elements.updateBookSearch) {
+        elements.updateBookSearch.addEventListener('input', handleUpdateBookSearch);
+        elements.updateBookSearch.addEventListener('keydown', handleUpdateBookSuggestionKeydown);
+    }
+
+    if (elements.resetUpdateBookForm) {
+        elements.resetUpdateBookForm.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (elements.updateBookForm) elements.updateBookForm.reset();
+            elements.updateBookId.value = "";
+        });
+    }
+
+    // Dark mode toggle
+    if (elements.darkModeToggle) {
+        elements.darkModeToggle.addEventListener("click", () => toggleDarkMode());
+    }
+
     elements.loginForm.addEventListener("submit", handleLogin);
+    if (elements.studentProfileForm) elements.studentProfileForm.addEventListener('submit', handleStudentProfileUpdate);
     elements.studentRegisterForm.addEventListener("submit", handleRegistration);
     elements.adminRegisterForm.addEventListener("submit", handleAdminRegistration);
     if (elements.adminUpdateForm) elements.adminUpdateForm.addEventListener("submit", handleAdminUpdate);
     elements.profileUpdateForm.addEventListener("submit", handleProfileUpdate);
-    elements.updTargetStudent.addEventListener("change", renderProfile);
-    elements.updTargetStudent.addEventListener("keydown", handleProfileStudentSelectSearch);
+
+    if (elements.updateStudentSearch) {
+        elements.updateStudentSearch.addEventListener("input", handleUpdateStudentSearch);
+        elements.updateStudentSearch.addEventListener("keydown", handleUpdateSuggestionKeydown);
+    }
+
+function handleUpdateStudentSearch() {
+    appState.currentUpdateStudentFilter = elements.updateStudentSearch.value.trim().toLowerCase();
+    renderProfileStudentSuggestions();
+}
+
+    if (elements.userSearch) {
+        elements.userSearch.addEventListener("input", handleUserSearch);
+    }
 
     elements.bookForm.addEventListener("submit", handleBookSave);
     elements.resetBookForm.addEventListener("click", resetBookForm);
     elements.bookSearch.addEventListener("input", handleBookSearch);
+
+    if (elements.bookAddBtn) {
+        elements.bookAddBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchModule('bookModule');
+            switchBookTab('addBookPanel');
+            forceKeepModuleVisible('bookModule');
+        });
+    }
 
     elements.issueForm.addEventListener("submit", handleIssueBook);
     elements.issueBookSearch.addEventListener("input", renderIssueSelects);
@@ -153,6 +302,23 @@ function bindEvents() {
     elements.logoutBtn.addEventListener("click", logout);
 }
 
+function toggleDarkMode(force) {
+    const body = document.body;
+    const isDark = typeof force === 'boolean' ? force : !body.classList.contains('dark-mode');
+    body.classList.toggle('dark-mode', isDark);
+    try {
+        localStorage.setItem('lms_dark_mode', isDark ? 'dark' : 'light');
+    } catch (e) {}
+    if (elements.darkModeToggle) {
+        elements.darkModeToggle.textContent = isDark ? '☀️' : '🌙';
+    }
+}
+
+function handleUserSearch() {
+    appState.currentStudentFilter = elements.userSearch.value.trim().toLowerCase();
+    renderUsers();
+}
+
 function switchTab(tabId) {
     elements.tabButtons.forEach((button) => {
         button.classList.toggle("active", button.dataset.tab === tabId);
@@ -160,6 +326,56 @@ function switchTab(tabId) {
 
     elements.tabContents.forEach((content) => {
         content.classList.toggle("active", content.id === tabId);
+    });
+}
+
+function switchUserTab(tabId) {
+    // toggle active button
+    const buttons = document.querySelectorAll(".user-tab-btn");
+    buttons.forEach((b) => b.classList.toggle("active", b.dataset.tab === tabId));
+
+    // toggle panels
+    const panels = document.querySelectorAll(".user-tab-panel");
+    panels.forEach((p) => {
+        if (p.id === tabId) {
+            p.classList.remove("hidden");
+            p.classList.add("active");
+        } else {
+            p.classList.add("hidden");
+            p.classList.remove("active");
+        }
+    });
+}
+
+function switchIssueTab(tabId) {
+    const buttons = document.querySelectorAll('.issue-tab-btn');
+    buttons.forEach((b) => b.classList.toggle('active', b.dataset.tab === tabId));
+
+    const panels = document.querySelectorAll('.issue-tab-panel');
+    panels.forEach((p) => {
+        if (p.id === tabId) {
+            p.classList.remove('hidden');
+            p.classList.add('active');
+        } else {
+            p.classList.add('hidden');
+            p.classList.remove('active');
+        }
+    });
+}
+
+function switchBookTab(tabId) {
+    const buttons = document.querySelectorAll('.book-tab-btn');
+    buttons.forEach((b) => b.classList.toggle('active', b.dataset.tab === tabId));
+
+    const panels = document.querySelectorAll('.book-tab-panel');
+    panels.forEach((p) => {
+        if (p.id === tabId) {
+            p.classList.remove('hidden');
+            p.classList.add('active');
+        } else {
+            p.classList.add('hidden');
+            p.classList.remove('active');
+        }
     });
 }
 
@@ -226,6 +442,15 @@ function loadState() {
     appState.users = [];
     appState.books = [];
     appState.issues = [];
+    // restore dark mode preference
+    try {
+        const pref = localStorage.getItem('lms_dark_mode');
+        if (pref === 'dark') {
+            toggleDarkMode(true);
+        } else if (pref === 'light') {
+            toggleDarkMode(false);
+        }
+    } catch (e) {}
 }
 
 function persistState() {
@@ -339,10 +564,19 @@ async function fetchAllData() {
         bookId: String(issue.bookId),
         studentId: String(issue.studentId),
         fine: Number(issue.fine || 0),
-        issueDate: String(issue.issueDate).slice(0, 10),
-        dueDate: String(issue.dueDate).slice(0, 10),
-        returnDate: issue.returnDate ? String(issue.returnDate).slice(0, 10) : ""
+        issueDate: formatDateUTC(issue.issueDate),
+        dueDate: formatDateUTC(issue.dueDate),
+        returnDate: issue.returnDate ? formatDateUTC(issue.returnDate) : "",
+        collectedUpto: formatDateUTC(issue.collected_upto || issue.collectedUpto)
     }));
+
+    // DEBUG: log first few issues and client timezone to help diagnose date format/timezone problems
+    try {
+        console.log("DEBUG_ISSUES_FIRST_5:", appState.issues.slice(0, 5));
+        console.log("DEBUG_CLIENT_TZ:", Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch (e) {
+        // ignore
+    }
 }
 
 async function restoreSession() {
@@ -400,6 +634,8 @@ async function handleLogin(event) {
     }
 }
 
+// Student login removed — authentication only via admin login and student registration handled by admin
+
 async function handleRegistration(event) {
     event.preventDefault();
 
@@ -424,7 +660,8 @@ async function handleRegistration(event) {
                 studentId: elements.regStudentId.value.trim(),
                 course: elements.regCourse.value.trim(),
                 email: elements.regEmail.value.trim().toLowerCase(),
-                phone: elements.regPhone.value.trim()
+                phone: elements.regPhone.value.trim(),
+                password: elements.regPassword.value.trim()
             })
         });
 
@@ -490,6 +727,7 @@ async function handleProfileUpdate(event) {
 
     const nextStudentId = elements.updStudentId.value.trim();
     const nextEmail = elements.updEmail.value.trim().toLowerCase();
+    const nextPassword = elements.updPassword.value.trim();
     const duplicateStudentId = appState.users.some(
         (user) => user.role === "student" && user.id !== selectedStudentId && (user.studentId || "") === nextStudentId
     );
@@ -522,7 +760,8 @@ async function handleProfileUpdate(event) {
                 email: nextEmail,
                 phone: elements.updPhone.value.trim(),
                 course: elements.updCourse.value.trim(),
-                studentId: nextStudentId
+                studentId: nextStudentId,
+                ...(nextPassword ? { password: nextPassword } : {})
             })
         });
 
@@ -539,71 +778,211 @@ async function handleProfileUpdate(event) {
 }
 
 function renderProfileStudentOptions() {
-    const students = appState.users.filter((user) => user.role === "student");
-    const selected = elements.updTargetStudent.value;
-
-    const options = students
-        .map((student) => `<option value="${student.id}">${student.name}</option>`)
-        .join("");
-
-    elements.updTargetStudent.innerHTML = `<option value="">Select a student</option>${options}`;
-
-    if (!students.length) {
-        elements.updTargetStudent.value = "";
-        return;
-    }
-
-    const hasPreviousSelection = students.some((student) => student.id === selected);
-    elements.updTargetStudent.value = hasPreviousSelection ? selected : "";
+    // Deprecated - replaced by renderProfileStudentSuggestions
 }
 
+function renderProfileStudentSuggestions() {
+    const container = document.getElementById('updSearchSuggestions');
+    if (!container) return;
+
+    const students = appState.users.filter((user) => user.role === 'student');
+    const query = (appState.currentUpdateStudentFilter || '').trim().toLowerCase();
+
+    if (!query) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const filtered = students.filter((student) =>
+        (student.name || '').toLowerCase().includes(query) ||
+        ((student.studentId || '').toLowerCase().includes(query)) ||
+        ((student.email || '').toLowerCase().includes(query)) ||
+        ((student.phone || '').toLowerCase().includes(query))
+    ).slice(0, 30);
+
+    if (!filtered.length) {
+        container.innerHTML = '<div class="suggestion-item"><div class="s-main">No matching students</div></div>';
+        return;
+    }
+
+    container.innerHTML = filtered.map((s, idx) => `
+        <div class="suggestion-item" data-idx="${idx}" data-id="${s.id}" role="option" tabindex="0">
+            <div class="s-main">${escapeHtml(s.name || '(no name)')}</div>
+            <div class="s-sub">${s.studentId || ''} • ${s.email || ''} • ${s.phone || ''}</div>
+        </div>
+    `).join('');
+
+    // attach click handlers
+    Array.from(container.querySelectorAll('.suggestion-item')).forEach((el) => {
+        el.addEventListener('click', () => {
+            const id = el.dataset.id;
+            selectStudentById(id);
+        });
+        el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                selectStudentById(el.dataset.id);
+            }
+        });
+    });
+
+    // reset active index
+    container.dataset.active = '-1';
+}
+
+/* Book suggestions for Update Book panel */
+function handleUpdateBookSearch() {
+    appState.currentUpdateBookFilter = elements.updateBookSearch.value.trim().toLowerCase();
+    renderBookSuggestions();
+}
+
+function renderBookSuggestions() {
+    const container = document.getElementById('updateBookSuggestions');
+    if (!container) return;
+
+    const books = appState.books || [];
+    const query = (appState.currentUpdateBookFilter || '').trim().toLowerCase();
+    if (!query) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const filtered = books.filter((b) =>
+        (b.title || '').toLowerCase().includes(query) ||
+        (b.author || '').toLowerCase().includes(query) ||
+        (b.isbn || '').toLowerCase().includes(query) ||
+        (b.category || '').toLowerCase().includes(query)
+    ).slice(0, 30);
+
+    if (!filtered.length) {
+        container.innerHTML = '<div class="suggestion-item"><div class="s-main">No matching books</div></div>';
+        return;
+    }
+
+    container.innerHTML = filtered.map((b, idx) => `
+        <div class="suggestion-item" data-idx="${idx}" data-id="${b.id}" role="option" tabindex="0">
+            <div class="s-main">${escapeHtml(b.title || '(no title)')}</div>
+            <div class="s-sub">${escapeHtml(b.author || '')} • ${escapeHtml(b.isbn || '')} • ${escapeHtml(b.category || '')}</div>
+        </div>
+    `).join('');
+
+    Array.from(container.querySelectorAll('.suggestion-item')).forEach((el) => {
+        el.addEventListener('click', () => selectBookById(el.dataset.id));
+        el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                selectBookById(el.dataset.id);
+            }
+        });
+    });
+
+    container.dataset.active = '-1';
+}
+
+function selectBookById(id) {
+    if (!id) return;
+    const book = appState.books.find((b) => String(b.id) === String(id));
+    if (!book) return;
+    if (elements.updateBookId) elements.updateBookId.value = String(book.id);
+    if (elements.updateBookTitle) elements.updateBookTitle.value = book.title || '';
+    if (elements.updateBookAuthor) elements.updateBookAuthor.value = book.author || '';
+    // ISBN removed from UI
+    if (elements.updateBookCategory) elements.updateBookCategory.value = book.category || '';
+    if (elements.updateBookTotalCopies) elements.updateBookTotalCopies.value = book.totalCopies || 1;
+    if (elements.updateBookYear) elements.updateBookYear.value = book.publishedYear || new Date().getFullYear();
+    if (elements.updateBookSearch) elements.updateBookSearch.value = book.title || '';
+    const container = document.getElementById('updateBookSuggestions');
+    if (container) container.innerHTML = '';
+}
+
+function handleUpdateBookSuggestionKeydown(e) {
+    const container = document.getElementById('updateBookSuggestions');
+    if (!container) return;
+    const items = Array.from(container.querySelectorAll('.suggestion-item'));
+    if (!items.length) return;
+
+    let active = parseInt(container.dataset.active || '-1', 10);
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        active = Math.min(active + 1, items.length - 1);
+        setActiveSuggestion(items, active, container);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        active = Math.max(active - 1, 0);
+        setActiveSuggestion(items, active, container);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (active >= 0 && active < items.length) selectBookById(items[active].dataset.id);
+    } else if (e.key === 'Escape') {
+        container.innerHTML = '';
+    }
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function selectStudentById(id) {
+    if (!id) return;
+    const student = appState.users.find((u) => String(u.id) === String(id));
+    if (!student) return;
+    if (elements.updTargetStudent) elements.updTargetStudent.value = String(student.id);
+    elements.updName.value = student.name || '';
+    elements.updPhone.value = student.phone || '';
+    elements.updCourse.value = student.course || '';
+    elements.updEmail.value = student.email || '';
+    elements.updStudentId.value = student.studentId || '';
+    // set search input to the selected student's name
+    if (elements.updateStudentSearch) elements.updateStudentSearch.value = student.name || '';
+    // clear suggestions
+    const container = document.getElementById('updSearchSuggestions');
+    if (container) container.innerHTML = '';
+}
+
+function handleUpdateSuggestionKeydown(e) {
+    const container = document.getElementById('updSearchSuggestions');
+    if (!container) return;
+    const items = Array.from(container.querySelectorAll('.suggestion-item'));
+    if (!items.length) return;
+
+    let active = parseInt(container.dataset.active || '-1', 10);
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        active = Math.min(active + 1, items.length - 1);
+        setActiveSuggestion(items, active, container);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        active = Math.max(active - 1, 0);
+        setActiveSuggestion(items, active, container);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (active >= 0 && active < items.length) {
+            selectStudentById(items[active].dataset.id);
+        }
+    } else if (e.key === 'Escape') {
+        container.innerHTML = '';
+    }
+}
+
+function setActiveSuggestion(items, index, container) {
+    items.forEach((it) => it.classList.remove('active'));
+    const target = items[index];
+    if (!target) return;
+    target.classList.add('active');
+    container.dataset.active = String(index);
+    // ensure visible
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
 function handleProfileStudentSelectSearch(event) {
-    if (event.ctrlKey || event.altKey || event.metaKey) {
-        return;
-    }
-
-    const now = Date.now();
-    const timeoutMs = 700;
-    const isBackspace = event.key === "Backspace";
-
-    if (isBackspace) {
-        if (!profileStudentSelectSearch.term) {
-            return;
-        }
-
-        event.preventDefault();
-        profileStudentSelectSearch.term = profileStudentSelectSearch.term.slice(0, -1);
-        profileStudentSelectSearch.lastTypedAt = now;
-
-        if (!profileStudentSelectSearch.term) {
-            return;
-        }
-    } else if (event.key.length === 1) {
-        const typedChar = event.key.toLowerCase();
-
-        if (now - profileStudentSelectSearch.lastTypedAt > timeoutMs) {
-            profileStudentSelectSearch.term = typedChar;
-        } else {
-            profileStudentSelectSearch.term += typedChar;
-        }
-
-        profileStudentSelectSearch.lastTypedAt = now;
-    } else {
-        return;
-    }
-
-    const options = Array.from(elements.updTargetStudent.options).filter((option) => option.value);
-    const matchedOption = options.find((option) =>
-        option.textContent.toLowerCase().includes(profileStudentSelectSearch.term)
-    );
-
-    if (!matchedOption) {
-        return;
-    }
-
-    event.preventDefault();
-    elements.updTargetStudent.value = matchedOption.value;
-    renderProfile();
+    // legacy helper for select-style quick-typing — no longer used when suggestions are enabled
+    return;
 }
 
 async function handleBookSave(event) {
@@ -619,11 +998,12 @@ async function handleBookSave(event) {
     const payload = {
         title: elements.bookTitle.value.trim(),
         author: elements.bookAuthor.value.trim(),
-        isbn: elements.bookIsbn.value.trim(),
         category: elements.bookCategory.value.trim(),
         totalCopies,
         publishedYear: Number(elements.bookYear.value)
     };
+    // include isbn only when provided (UI no longer exposes it)
+    if (elements.bookIsbn && elements.bookIsbn.value && elements.bookIsbn.value.trim()) payload.isbn = elements.bookIsbn.value.trim();
 
     try {
         if (!existingBookId) {
@@ -847,11 +1227,11 @@ async function handleBookAction(action, bookId) {
         elements.bookId.value = book.id;
         elements.bookTitle.value = book.title;
         elements.bookAuthor.value = book.author;
-        elements.bookIsbn.value = book.isbn;
         elements.bookCategory.value = book.category;
         elements.bookTotalCopies.value = book.totalCopies;
         elements.bookYear.value = book.publishedYear;
         switchModule("bookModule");
+        switchBookTab("addBookPanel");
         return;
     }
 
@@ -873,7 +1253,15 @@ async function handleBookAction(action, bookId) {
             renderAll();
             showToast("Book deleted.");
         } catch (error) {
-            showToast(error.message || "Book delete failed.");
+            const msg = (error && error.message) ? error.message : "Book delete failed.";
+            // if backend reports active issues, refresh data and show actionable message
+            if (msg.toLowerCase().includes('active issues') || msg.toLowerCase().includes('currently issued')) {
+                await fetchAllData();
+                renderAll();
+                showToast("Cannot delete: book has active issued copies. Return them first.");
+            } else {
+                showToast(msg);
+            }
         }
     }
 }
@@ -909,6 +1297,16 @@ async function handleIssueAction(action, issueId) {
             showToast(error.message || "Return failed.");
         }
     }
+    else if (action === "collect") {
+        try {
+            const response = await apiRequest(`/issues/${issueId}/collect`, { method: "POST" });
+            await fetchAllData();
+            renderAll();
+            showToast(`Fine collected: ₹${response.collected}`);
+        } catch (err) {
+            showToast(err.message || "Collect failed.");
+        }
+    }
 }
 
 function applyRoleAccess() {
@@ -925,6 +1323,64 @@ function applyRoleAccess() {
     } else {
         elements.issueStudentNameSearch.disabled = true;
         elements.issueStudentIdSearch.disabled = true;
+    }
+
+    // Make profile/update form read-only for non-admin users
+    if (elements.profileUpdateForm) {
+        const controls = elements.profileUpdateForm.querySelectorAll('input,select,textarea,button');
+        controls.forEach((c) => {
+            // allow admins to interact normally
+            if (admin) {
+                c.removeAttribute('disabled');
+                if (c.tagName === 'INPUT' || c.tagName === 'TEXTAREA') c.readOnly = false;
+            } else {
+                // disable buttons (including submit) and make inputs read-only
+                if (c.tagName === 'BUTTON') {
+                    c.disabled = true;
+                } else if (c.tagName === 'INPUT' || c.tagName === 'TEXTAREA' || c.tagName === 'SELECT') {
+                    try { c.readOnly = true; } catch (e) {}
+                    try { c.disabled = true; } catch (e) {}
+                }
+            }
+        });
+    }
+
+    // Limit visible user-management tabs for students: only allow the update/profile tab (read-only)
+    if (elements.userTabButtons) {
+        elements.userTabButtons.forEach((btn) => {
+            const tab = btn.dataset.tab;
+            if (admin) {
+                btn.classList.remove('hidden');
+            } else {
+                // show only updPanel for students
+                if (tab === 'updPanel') {
+                    btn.classList.remove('hidden');
+                } else {
+                    btn.classList.add('hidden');
+                }
+            }
+        });
+    }
+
+    // Limit top-level modules: students see only reports
+    if (elements.moduleButtons) {
+        elements.moduleButtons.forEach((btn) => {
+            const module = btn.dataset.module;
+            if (admin) {
+                btn.classList.remove('hidden');
+            } else {
+                // show student modules
+                if (['dashboardModule','studentProfileModule','studentIssuedModule','studentHistoryModule'].includes(module)) {
+                    btn.classList.remove('hidden');
+                } else {
+                    btn.classList.add('hidden');
+                }
+            }
+        });
+        // ensure UI is on reports for students
+        if (!admin) {
+            switchModule('dashboardModule');
+        }
     }
 }
 
@@ -955,8 +1411,59 @@ function renderAll() {
     renderIssueSelects();
     renderIssues();
     renderDashboard();
+    renderStudentProfile();
+    renderStudentIssued();
+    renderStudentHistory();
     renderReports();
     try { console.log(`[NAV] renderAll end (current:${getActiveModuleId()})`); } catch (e) {}
+}
+
+function renderStudentProfile() {
+    if (!appState.currentUser) return;
+    if (isAdmin()) return; // only for students
+    const u = appState.currentUser;
+    if (elements.studentProfileForm) {
+        elements.stuName.value = u.name || '';
+        elements.stuStudentId.value = u.studentId || '';
+        elements.stuEmail.value = u.email || '';
+        elements.stuPhone.value = u.phone || '';
+        elements.stuCourse.value = u.course || '';
+        elements.stuNewPassword.value = '';
+    }
+}
+
+function renderStudentIssued() {
+    if (!appState.currentUser) return;
+    if (isAdmin()) return;
+    const studentId = String(appState.currentUser.id);
+    const current = appState.issues.filter((i) => String(i.studentId) === studentId && i.status === 'issued');
+    if (!elements.studentIssuedTableBody) return;
+    if (!current.length) {
+        elements.studentIssuedTableBody.innerHTML = '<tr><td colspan="4">No issued books</td></tr>';
+        return;
+    }
+    elements.studentIssuedTableBody.innerHTML = current.map((issue) => {
+        const book = appState.books.find((b) => String(b.id) === String(issue.bookId));
+        const title = book ? escapeHtml(book.title) : '-';
+        return `<tr><td>${title}</td><td>${formatDateUTC(issue.issueDate)}</td><td>${formatDateUTC(issue.dueDate)}</td><td>${escapeHtml(issue.status)}</td></tr>`;
+    }).join('');
+}
+
+function renderStudentHistory() {
+    if (!appState.currentUser) return;
+    if (isAdmin()) return;
+    const studentId = String(appState.currentUser.id);
+    const history = appState.issues.filter((i) => String(i.studentId) === studentId && i.status !== 'issued');
+    if (!elements.studentHistoryTableBody) return;
+    if (!history.length) {
+        elements.studentHistoryTableBody.innerHTML = '<tr><td colspan="4">No history</td></tr>';
+        return;
+    }
+    elements.studentHistoryTableBody.innerHTML = history.map((issue) => {
+        const book = appState.books.find((b) => String(b.id) === String(issue.bookId));
+        const title = book ? escapeHtml(book.title) : '-';
+        return `<tr><td>${title}</td><td>${formatDateUTC(issue.issueDate)}</td><td>${issue.returnDate ? formatDateUTC(issue.returnDate) : '-'}</td><td>${escapeHtml(issue.status)}</td></tr>`;
+    }).join('');
 }
 
 function renderProfile() {
@@ -970,38 +1477,44 @@ function renderProfile() {
         elements.updCourse.value = appState.currentUser.course || "";
         elements.updEmail.value = appState.currentUser.email || "";
         elements.updStudentId.value = appState.currentUser.studentId || "";
-        elements.welcomeText.textContent = `${appState.currentUser.name} (${appState.currentUser.role})`;
+        // Show detailed student profile in top session area
+        const name = appState.currentUser.name || "-";
+        const sid = appState.currentUser.studentId || "-";
+        const course = appState.currentUser.course || "-";
+        elements.welcomeText.textContent = `${name} | ID: ${sid} | ${course}`;
         return;
     }
-
+    // For admins, populate fields based on search input (no visible dropdown)
     renderProfileStudentOptions();
-    const selectedStudentId = elements.updTargetStudent.value;
-    const selectedStudent = appState.users.find(
-        (user) => user.role === "student" && user.id === selectedStudentId
-    );
+}
 
-    if (!selectedStudent) {
-        elements.updName.value = "";
-        elements.updPhone.value = "";
-        elements.updCourse.value = "";
-        elements.updEmail.value = "";
-        elements.updStudentId.value = "";
-        // Prefill admin update form if present
-        if (elements.adminUpdName) {
-            elements.adminUpdName.value = appState.currentUser.name || "";
-            elements.adminUpdEmail.value = appState.currentUser.email || "";
-            elements.adminUpdPhone.value = appState.currentUser.phone || "";
-            elements.adminUpdPassword.value = "";
-        }
+async function handleStudentProfileUpdate(event) {
+    event.preventDefault();
+    if (!appState.currentUser) return;
+    if (isAdmin()) {
+        showToast('Admins should update via Admin panel.');
         return;
     }
 
-    elements.updName.value = selectedStudent.name || "";
-    elements.updPhone.value = selectedStudent.phone || "";
-    elements.updCourse.value = selectedStudent.course || "";
-    elements.updEmail.value = selectedStudent.email || "";
-    elements.updStudentId.value = selectedStudent.studentId || "";
-    elements.welcomeText.textContent = `${appState.currentUser.name} (${appState.currentUser.role})`;
+    const name = elements.stuName.value.trim();
+    const email = elements.stuEmail.value.trim().toLowerCase();
+    const phone = elements.stuPhone.value.trim();
+    const course = elements.stuCourse.value.trim();
+    const password = elements.stuNewPassword.value;
+
+    try {
+        const body = { name, email, phone, course };
+        if (password) body.password = password;
+
+        const response = await apiRequest('/auth/me', { method: 'PUT', body: JSON.stringify(body) });
+        // update local session
+        appState.currentUser = { ...appState.currentUser, name: response.name, email: response.email, phone: response.phone, course: response.course };
+        localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(appState.currentUser));
+        showToast('Profile updated.');
+        renderAll();
+    } catch (err) {
+        showToast(err.message || 'Update failed.');
+    }
 }
 
 async function handleAdminUpdate(event) {
@@ -1038,7 +1551,19 @@ async function handleAdminUpdate(event) {
 }
 
 function renderUsers() {
-    const rows = appState.users
+    const query = appState.currentStudentFilter || "";
+    const students = appState.users.filter((user) => user.role === "student");
+    const filteredStudents = students.filter((user) => {
+        if (!query) return true;
+        return (
+            user.name.toLowerCase().includes(query) ||
+            (user.studentId || "").toLowerCase().includes(query) ||
+            (user.email || "").toLowerCase().includes(query) ||
+            (user.phone || "").toLowerCase().includes(query)
+        );
+    });
+
+    const rows = filteredStudents
         .map((user) => {
             const isStudent = user.role === "student";
             const deletedBadge = isStudent && user.deletedAt ? '<span class="badge badge-secondary">Deleted</span>' : '';
@@ -1071,7 +1596,7 @@ function renderUsers() {
         })
         .join("");
 
-    elements.usersTableBody.innerHTML = rows || `<tr><td colspan="8">No users found.</td></tr>`;
+    elements.usersTableBody.innerHTML = rows || `<tr><td colspan="8">No students found.</td></tr>`;
 
     elements.usersTableBody.querySelectorAll("[data-student-action]").forEach((button) => {
         button.addEventListener("click", () => handleStudentAction(button.dataset.studentAction, button.dataset.studentId));
@@ -1117,6 +1642,11 @@ function renderBooks() {
         );
     });
 
+    // update count in title bar if present
+    try {
+        if (elements.booksCount) elements.booksCount.textContent = String(filteredBooks.length);
+    } catch (e) {}
+
     const rows = filteredBooks
         .map((book) => {
             const availabilityText = `${book.availableCopies}/${book.totalCopies}`;
@@ -1129,7 +1659,6 @@ function renderBooks() {
                 <td>${book.id}</td>
                 <td>${book.title}</td>
                 <td>${book.author}</td>
-                <td>${book.isbn}</td>
                 <td>${book.category}</td>
                 <td>${availabilityText}</td>
                 <td>${actions}</td>
@@ -1137,11 +1666,54 @@ function renderBooks() {
         })
         .join("");
 
-    elements.booksTableBody.innerHTML = rows || `<tr><td colspan="7">No books found.</td></tr>`;
+    elements.booksTableBody.innerHTML = rows || `<tr><td colspan="6">No books found.</td></tr>`;
 
     elements.booksTableBody.querySelectorAll("[data-book-action]").forEach((button) => {
         button.addEventListener("click", () => handleBookAction(button.dataset.bookAction, button.dataset.bookId));
     });
+
+    // populate update select for Update Book panel
+    if (elements.updateBookSelect) {
+        const options = appState.books
+            .map((b) => `<option value="${b.id}">${b.title} — ${b.author}</option>`)
+            .join("");
+        elements.updateBookSelect.innerHTML = `<option value="">-- Select a book --</option>${options}`;
+    }
+}
+
+async function handleUpdateBook(event) {
+    event.preventDefault();
+    if (!isAdmin()) {
+        showToast("Only admin can update books.");
+        return;
+    }
+
+    const bookId = elements.updateBookId.value;
+    if (!bookId) {
+        showToast("Select a book to update.");
+        return;
+    }
+
+    const payload = {
+        title: elements.updateBookTitle.value.trim(),
+        author: elements.updateBookAuthor.value.trim(),
+        category: elements.updateBookCategory.value.trim(),
+        totalCopies: Number(elements.updateBookTotalCopies.value),
+        publishedYear: Number(elements.updateBookYear.value)
+    };
+    // ISBN not provided via UI
+
+    try {
+        await apiRequest(`/books/${bookId}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+        });
+        showToast("Book updated.");
+        await fetchAllData();
+        renderAll();
+    } catch (err) {
+        showToast(err.message || "Update failed.");
+    }
 }
 
 function renderIssueSelects() {
@@ -1200,10 +1772,55 @@ function renderIssueSelects() {
 }
 
 function renderIssues() {
-    const visibleIssues = isAdmin()
-        ? appState.issues
+    // Start with issues visible to the current role
+    let visibleIssues = isAdmin()
+        ? appState.issues.slice()
         : appState.issues.filter((issue) => issue.studentId === appState.currentUser.id);
 
+    // For students show only currently relevant issues (issued or returned with outstanding fine)
+    visibleIssues = visibleIssues.filter((issue) => {
+        if (issue.status === 'issued') return true;
+        const fineNow = getCurrentFine(issue);
+        return fineNow > 0;
+    });
+
+    if (!isAdmin()) {
+        // Simplified view for students: Book | Issue Date | Due Date | Fine
+        const rows = visibleIssues
+            .map((issue) => {
+                const book = appState.books.find((item) => item.id === issue.bookId);
+                const fineAmount = getCurrentFine(issue);
+                return `<tr>
+                    <td>${book ? escapeHtml(book.title) : "-"}</td>
+                    <td>${issue.issueDate}</td>
+                    <td>${issue.dueDate}</td>
+                    <td>₹${fineAmount}</td>
+                </tr>`;
+            })
+            .join("");
+
+        // Replace table header to match simplified columns for students
+        const header = `<tr>
+            <th>Book</th>
+            <th>Issue Date</th>
+            <th>Due Date</th>
+            <th>Fine</th>
+        </tr>`;
+
+        // If the table header element exists, replace its thead
+        try {
+            const table = elements.issuesTableBody.closest('table');
+            if (table) {
+                const thead = table.querySelector('thead');
+                if (thead) thead.innerHTML = header;
+            }
+        } catch (e) {}
+
+        elements.issuesTableBody.innerHTML = rows || `<tr><td colspan="4">No issue records found.</td></tr>`;
+        return;
+    }
+
+    // Admin view (unchanged)
     const rows = visibleIssues
         .map((issue) => {
             const book = appState.books.find((item) => item.id === issue.bookId);
@@ -1211,6 +1828,9 @@ function renderIssues() {
             const overdue = isOverdue(issue);
             const statusText = issue.status === "issued" && overdue ? "issued (overdue)" : issue.status;
             const fineAmount = getCurrentFine(issue);
+            const collectBtn = (fineAmount > 0)
+                ? `<button class="btn btn-primary" data-issue-action="collect" data-issue-id="${issue.id}">Collect Fine</button>`
+                : "";
             const actionBtn = issue.status === "issued"
                 ? `<button class="btn btn-secondary" data-issue-action="return" data-issue-id="${issue.id}">Return</button>`
                 : "-";
@@ -1225,7 +1845,7 @@ function renderIssues() {
                 <td>${issue.returnDate || "-"}</td>
                 <td>${statusText}</td>
                 <td>₹${fineAmount}</td>
-                <td>${actionBtn}</td>
+                <td>${actionBtn} ${collectBtn}</td>
             </tr>`;
         })
         .join("");
@@ -1265,7 +1885,7 @@ function renderDashboard() {
     const totalBooks = appState.books.reduce((sum, book) => sum + book.totalCopies, 0);
     const issuedBooks = appState.issues.filter((issue) => issue.status === "issued").length;
     const overdueBooks = appState.issues.filter((issue) => issue.status === "issued" && isOverdue(issue)).length;
-    const totalFine = appState.issues.reduce((sum, issue) => sum + getCurrentFine(issue), 0);
+    const totalFine = filterIssuesByRole(appState.issues).reduce((sum, issue) => sum + getCurrentFine(issue), 0);
 
     elements.dashTotalBooks.textContent = String(totalBooks);
     elements.dashIssuedBooks.textContent = String(issuedBooks);
@@ -1307,6 +1927,71 @@ function renderReports() {
     elements.overdueList.innerHTML = listFromIssues(visibleOverdue, false);
     elements.fineList.innerHTML = listFromIssues(fineIssues, true);
     elements.blockedList.innerHTML = listFromBlockedStudents(visibleBlockedStudents);
+
+    // If current user is a student, show student dashboard with detailed info
+    if (!isAdmin() && appState.currentUser) {
+        const studentId = appState.currentUser.id;
+        const student = appState.users.find((u) => String(u.id) === String(studentId)) || appState.currentUser;
+        const studentIssuesAll = appState.issues.filter((issue) => String(issue.studentId) === String(studentId));
+        const currentlyIssued = studentIssuesAll.filter((i) => i.status === 'issued');
+        const dueCount = currentlyIssued.filter((i) => isOverdue(i)).length;
+        // next return = earliest due date among currently issued
+        let nextReturn = null;
+        currentlyIssued.forEach((i) => {
+            const d = parseDateAsUTC(i.dueDate);
+            if (!d) return;
+            if (!nextReturn || d.getTime() < nextReturn.getTime()) nextReturn = d;
+        });
+
+        const totalFineForStudent = studentIssuesAll.reduce((s, it) => s + getCurrentFine(it), 0);
+
+        // populate profile
+        if (elements.studentProfileName) elements.studentProfileName.textContent = student.name || '-';
+        if (elements.studentProfileId) elements.studentProfileId.textContent = student.studentId || '-';
+        if (elements.studentProfileCourse) elements.studentProfileCourse.textContent = student.course || '-';
+
+        if (elements.studentTotalIssued) elements.studentTotalIssued.textContent = String(currentlyIssued.length);
+        if (elements.studentDueCount) elements.studentDueCount.textContent = String(dueCount);
+        if (elements.studentNextReturn) elements.studentNextReturn.textContent = nextReturn ? formatDateUTC(nextReturn.toISOString().slice(0,10)) : '-';
+        if (elements.studentTotalFine) elements.studentTotalFine.textContent = `₹${totalFineForStudent}`;
+
+        // history table
+        if (elements.studentIssueHistory) {
+            if (!studentIssuesAll.length) {
+                elements.studentIssueHistory.innerHTML = '<tr><td colspan="6">No history</td></tr>';
+            } else {
+                elements.studentIssueHistory.innerHTML = studentIssuesAll
+                    .sort((a,b) => (a.issueDate || '').localeCompare(b.issueDate || ''))
+                    .map((issue) => {
+                        const book = appState.books.find((b) => String(b.id) === String(issue.bookId));
+                        const title = book ? escapeHtml(book.title) : '-';
+                        const issueDate = formatDateUTC(issue.issueDate);
+                        const dueDate = formatDateUTC(issue.dueDate);
+                        const returnDate = issue.returnDate ? formatDateUTC(issue.returnDate) : '-';
+                        const status = issue.status || '-';
+                        const fine = getCurrentFine(issue);
+                        return `<tr>
+                            <td>${title}</td>
+                            <td>${issueDate}</td>
+                            <td>${dueDate}</td>
+                            <td>${returnDate}</td>
+                            <td>${status}</td>
+                            <td>₹${fine}</td>
+                        </tr>`;
+                    })
+                    .join('');
+            }
+        }
+
+        // show student dashboard, hide generic report lists
+        if (elements.studentDashboard) elements.studentDashboard.classList.remove('hidden');
+        if (elements.reportListsWrap) elements.reportListsWrap.classList.add('hidden');
+    } else {
+        // admin or anonymous: hide student dashboard and show generic reports
+        if (elements.studentDashboard) elements.studentDashboard.classList.add('hidden');
+        if (elements.reportListsWrap) elements.reportListsWrap.classList.remove('hidden');
+    }
+
 }
 
 function filterIssuesByRole(issues) {
@@ -1326,7 +2011,7 @@ function listFromIssues(issues, includeFine) {
             const book = appState.books.find((item) => item.id === issue.bookId);
             const student = appState.users.find((item) => item.id === issue.studentId);
             const fineText = includeFine ? ` | Fine: ₹${getCurrentFine(issue)}` : "";
-            return `<li>${book ? book.title : "-"} - ${student ? student.name : "-"}${fineText}</li>`;
+            return `<li>${book ? escapeHtml(book.title) : "-"} - ${student ? escapeHtml(student.name) : "-"}${fineText}</li>`;
         })
         .join("");
 }
@@ -1366,7 +2051,21 @@ function renderBarChart(container, items) {
 }
 
 function isOverdue(issue) {
-    return issue.status === "issued" && new Date(issue.dueDate) < new Date(getToday());
+    if (issue.status !== "issued") return false;
+    const due = parseDateAsUTC(issue.dueDate);
+    const today = parseDateAsUTC(getToday());
+    if (!due || !today) return false;
+    if (today.getTime() <= due.getTime()) return false;
+
+    if (issue.collectedUpto) {
+        const collected = parseDateAsUTC(issue.collectedUpto);
+        if (collected) {
+            // if already collected up to today or beyond, it's not overdue
+            if (collected.getTime() >= today.getTime() || collected.getTime() >= due.getTime()) return false;
+        }
+    }
+
+    return true;
 }
 
 function getCurrentFine(issue) {
@@ -1374,12 +2073,25 @@ function getCurrentFine(issue) {
     if (issue.status === "returned") {
         return storedFine;
     }
+    // For issued items, compute overdue days up to today and subtract already-collected days (using UTC dates)
+    const due = parseDateAsUTC(issue.dueDate);
+    const today = parseDateAsUTC(getToday());
+    if (!due || !today) return 0;
+    if (today.getTime() <= due.getTime()) return 0;
 
-    if (!isOverdue(issue)) {
-        return 0;
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const totalOverdueDays = Math.ceil((today.getTime() - due.getTime()) / msPerDay);
+
+    let alreadyCollectedDays = 0;
+    if (issue.collectedUpto) {
+        const collected = parseDateAsUTC(issue.collectedUpto);
+        if (collected && collected.getTime() > due.getTime()) {
+            alreadyCollectedDays = Math.ceil((collected.getTime() - due.getTime()) / msPerDay);
+        }
     }
 
-    return calculateFine(issue.dueDate, getToday());
+    const outstandingDays = Math.max(0, totalOverdueDays - alreadyCollectedDays);
+    return outstandingDays * FINE_PER_DAY;
 }
 
 function calculateFine(dueDate, returnDate) {
@@ -1429,6 +2141,43 @@ function toDateInputValue(date) {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
+}
+
+// Format an ISO date/string as YYYY-MM-DD using UTC components to avoid local timezone shifts
+function formatDateUTC(input) {
+    if (!input) return "";
+    // If already in YYYY-MM-DD form, return as-is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(input).trim())) {
+        return String(input).trim();
+    }
+
+    // If input is an ISO-like string with a date portion, preserve the server-provided date
+    // (handles forms like "2026-05-16" or "2026-05-16T00:00:00" or with offsets)
+    const s = String(input).trim();
+    const match = s.match(/^(\d{4}-\d{2}-\d{2})(?:[Tt].*)?$/);
+    if (match) {
+        return match[1];
+    }
+
+    // Fallback: attempt to parse and return UTC date components
+    let iso = s;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(iso) && !iso.endsWith('Z')) {
+        iso = iso + 'Z';
+    }
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function parseDateAsUTC(dateStr) {
+    if (!dateStr) return null;
+    const parts = String(dateStr).split('-').map((p) => Number(p));
+    if (parts.length < 3) return null;
+    const [y, m, d] = parts;
+    return new Date(Date.UTC(y, m - 1, d));
 }
 
 initApp();

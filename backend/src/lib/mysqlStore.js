@@ -4,6 +4,9 @@ const bcrypt = require("bcryptjs");
 const FINE_PER_DAY = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// timezone for date-only handling
+const ZONE = process.env.APP_TIMEZONE || 'Asia/Kolkata';
+
 const dbConfig = {
   host: process.env.DB_HOST || "localhost",
   port: Number(process.env.DB_PORT || 3306),
@@ -18,30 +21,47 @@ const dbConfig = {
 let pool = null;
 let initializationPromise = null;
 
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function formatDate(value) {
-  if (!value) {
-    return null;
+  if (!value) return null;
+
+  // If DB returned a plain YYYY-MM-DD string, return as-is
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
   }
 
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
+  if (Number.isNaN(date.getTime())) return null;
 
-  return date.toISOString().slice(0, 10);
+  // Use Intl.DateTimeFormat for the configured timezone to get Y/M/D
+  try {
+    const dtf = new Intl.DateTimeFormat('en-CA', { timeZone: ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const parts = dtf.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year').value;
+    const month = parts.find((p) => p.type === 'month').value;
+    const day = parts.find((p) => p.type === 'day').value;
+    return `${year}-${month}-${day}`;
+  } catch (err) {
+    // fallback to local getters
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
 }
 
 function toUtcDateOnly(value) {
-  if (!value) {
-    return null;
-  }
+  if (!value) return null;
 
+  // get the YYYY-MM-DD as per configured timezone
   const dateString = formatDate(value);
-  if (!dateString) {
-    return null;
-  }
+  if (!dateString) return null;
 
-  const [year, month, day] = dateString.split("-").map(Number);
+  const [year, month, day] = dateString.split('-').map(Number);
+  // Create a Date at UTC midnight for that zoned date (so comparisons are consistent)
   return new Date(Date.UTC(year, month - 1, day));
 }
 
@@ -75,6 +95,7 @@ async function ensureSchema() {
       name VARCHAR(120) NOT NULL,
       student_id VARCHAR(60) NOT NULL UNIQUE,
       email VARCHAR(190) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NULL,
       phone VARCHAR(30) NULL,
       course VARCHAR(120) NULL,
       created_at DATE NOT NULL DEFAULT (CURRENT_DATE),
@@ -82,6 +103,14 @@ async function ensureSchema() {
       deleted_at DATE NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  const studentAdminColumn = await query(
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'students' AND COLUMN_NAME = 'admin_id' LIMIT 1",
+    [dbConfig.database]
+  );
+  if (studentAdminColumn.length === 0) {
+    await pool.query("ALTER TABLE students ADD COLUMN admin_id INT NULL AFTER created_at");
+  }
 
   // Backward-compatible migration for existing databases (works on older MySQL too)
   const blockedColumn = await query(
@@ -100,18 +129,54 @@ async function ensureSchema() {
     await pool.query("ALTER TABLE students ADD COLUMN deleted_at DATE NULL");
   }
 
+  const passwordHashColumn = await query(
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'students' AND COLUMN_NAME = 'password_hash' LIMIT 1",
+    [dbConfig.database]
+  );
+  if (passwordHashColumn.length === 0) {
+    await pool.query("ALTER TABLE students ADD COLUMN password_hash VARCHAR(255) NULL AFTER email");
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS books (
       id INT AUTO_INCREMENT PRIMARY KEY,
       title VARCHAR(200) NOT NULL,
       author VARCHAR(200) NOT NULL,
-      isbn VARCHAR(80) NOT NULL UNIQUE,
+      isbn VARCHAR(80) NULL,
       category VARCHAR(120) NOT NULL,
       total_copies INT NOT NULL DEFAULT 0,
       available_copies INT NOT NULL DEFAULT 0,
       published_year INT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  const bookAdminColumn = await query(
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'books' AND COLUMN_NAME = 'admin_id' LIMIT 1",
+    [dbConfig.database]
+  );
+  if (bookAdminColumn.length === 0) {
+    await pool.query("ALTER TABLE books ADD COLUMN admin_id INT NULL AFTER isbn");
+  }
+
+  // Migration: if the books table already exists with NOT NULL isbn, alter it to NULL and drop UNIQUE constraint
+  try {
+    const [columns] = await pool.query("SHOW COLUMNS FROM books WHERE Field = 'isbn'");
+    if (columns && columns.length > 0) {
+      const isbnCol = columns[0];
+      // If it's NOT NULL, make it NULL
+      if (isbnCol.Null === 'NO') {
+        await pool.query("ALTER TABLE books MODIFY COLUMN isbn VARCHAR(80) NULL");
+      }
+    }
+    // Drop UNIQUE index if it exists
+    const [indexes] = await pool.query("SHOW INDEX FROM books WHERE Column_name = 'isbn' AND Key_name != 'PRIMARY'");
+    if (indexes && indexes.length > 0) {
+      const indexName = indexes[0].Key_name;
+      await pool.query(`ALTER TABLE books DROP INDEX \`${indexName}\``);
+    }
+  } catch (e) {
+    console.warn("[STORE] Warning during books table migration:", e.message);
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS issues (
@@ -123,10 +188,27 @@ async function ensureSchema() {
       return_date DATE NULL,
       status ENUM('issued', 'returned') NOT NULL DEFAULT 'issued',
       fine INT NOT NULL DEFAULT 0,
+      collected_upto DATE NULL,
       CONSTRAINT fk_issues_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE RESTRICT ON UPDATE CASCADE,
       CONSTRAINT fk_issues_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+
+  const issueAdminColumn = await query(
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'issues' AND COLUMN_NAME = 'admin_id' LIMIT 1",
+    [dbConfig.database]
+  );
+  if (issueAdminColumn.length === 0) {
+    await pool.query("ALTER TABLE issues ADD COLUMN admin_id INT NULL AFTER id");
+  }
+
+  const collectedUptoColumn = await query(
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'issues' AND COLUMN_NAME = 'collected_upto' LIMIT 1",
+    [dbConfig.database]
+  );
+  if (collectedUptoColumn.length === 0) {
+    await pool.query("ALTER TABLE issues ADD COLUMN collected_upto DATE NULL");
+  }
 }
 
 async function ensureDefaultAdmin() {
@@ -149,10 +231,86 @@ async function ensureDefaultAdmin() {
 async function initializeDatabase() {
   if (!initializationPromise) {
     initializationPromise = (async () => {
-      await ensureDatabaseExists();
-      pool = mysql.createPool(dbConfig);
-      await ensureSchema();
-      await ensureDefaultAdmin();
+      const maxAttempts = 6;
+      let attempt = 0;
+      let lastErr = null;
+
+      while (attempt < maxAttempts) {
+        attempt += 1;
+        try {
+          console.log(`[STORE] DB init attempt ${attempt}/${maxAttempts} to ${dbConfig.host}:${dbConfig.port} (db=${dbConfig.database})`);
+          await ensureDatabaseExists();
+          pool = mysql.createPool(dbConfig);
+          // ensure pool connections use the desired DB time zone offset (default IST)
+          const TZ_OFFSET = process.env.DB_TIMEZONE_OFFSET || '+05:30';
+          try {
+            pool.on && pool.on('connection', (conn) => {
+              try { conn.query(`SET time_zone = '${TZ_OFFSET}'`); } catch (e) { /* ignore */ }
+            });
+            // set for at least one connection immediately
+            await pool.query(`SET time_zone = '${TZ_OFFSET}'`);
+          } catch (e) {
+            // ignore if driver doesn't support events or query fails
+          }
+          await ensureSchema();
+          await ensureDefaultAdmin();
+
+          // After default admin exists, migrate existing rows to be owned by default admin
+          try {
+            const defaultEmail = (process.env.DEFAULT_ADMIN_EMAIL || "admin@library.com").toLowerCase();
+            const [[adminRow]] = await pool.query("SELECT id FROM admins WHERE email = ? LIMIT 1", [defaultEmail]);
+            const defaultAdminId = adminRow && adminRow.id ? adminRow.id : null;
+
+            if (defaultAdminId) {
+              // Ensure students, books, issues have admin_id column filled for existing rows
+              // students
+              try {
+                await pool.query("ALTER TABLE students MODIFY COLUMN admin_id INT NULL");
+                await pool.query("UPDATE students SET admin_id = ? WHERE admin_id IS NULL", [defaultAdminId]);
+                await pool.query("ALTER TABLE students MODIFY COLUMN admin_id INT NOT NULL");
+              } catch (e) {
+                // ignore individual table migration errors
+              }
+
+              // books
+              try {
+                await pool.query("ALTER TABLE books MODIFY COLUMN admin_id INT NULL");
+                await pool.query("UPDATE books SET admin_id = ? WHERE admin_id IS NULL", [defaultAdminId]);
+                await pool.query("ALTER TABLE books MODIFY COLUMN admin_id INT NOT NULL");
+              } catch (e) {
+                // ignore
+              }
+
+              // issues
+              try {
+                await pool.query("ALTER TABLE issues MODIFY COLUMN admin_id INT NULL");
+                await pool.query("UPDATE issues SET admin_id = ? WHERE admin_id IS NULL", [defaultAdminId]);
+                await pool.query("ALTER TABLE issues MODIFY COLUMN admin_id INT NOT NULL");
+              } catch (e) {
+                // ignore
+              }
+            }
+          } catch (e) {
+            // ignore migration errors here
+          }
+          console.log(`[STORE] Database initialized (attempt ${attempt})`);
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          console.error(`[STORE] Database init attempt ${attempt} failed: ${err && err.message}`);
+          // on final attempt, rethrow
+          if (attempt >= maxAttempts) break;
+          // backoff before retrying
+          const waitMs = Math.min(1000 * Math.pow(2, attempt), 15000);
+          console.log(`[STORE] Retrying in ${waitMs}ms...`);
+          await sleep(waitMs);
+        }
+      }
+
+      if (lastErr) {
+        throw lastErr;
+      }
     })();
   }
 
@@ -237,10 +395,16 @@ async function createAdmin(name, email, passwordHash, phone) {
   };
 }
 
-async function getAllStudents() {
-  const rows = await query(
-    "SELECT id, name, student_id AS studentId, email, phone, course, created_at AS createdAt, blocked, deleted_at AS deletedAt FROM students WHERE deleted_at IS NULL ORDER BY id DESC"
-  );
+async function getAllStudents(adminId = null) {
+  let sql = "SELECT id, name, student_id AS studentId, email, phone, course, created_at AS createdAt, blocked, deleted_at AS deletedAt FROM students WHERE deleted_at IS NULL";
+  const params = [];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+  sql += " ORDER BY id DESC";
+
+  const rows = await query(sql, params);
 
   return rows.map((row) => ({
     ...row,
@@ -253,29 +417,58 @@ async function getStudent(id) {
   return rows[0] || null;
 }
 
-async function deleteStudent(id) {
+async function getStudentByStudentId(studentId) {
+  const rows = await query("SELECT * FROM students WHERE student_id = ? LIMIT 1", [studentId]);
+  return rows[0] || null;
+}
+
+async function deleteStudent(id, adminId = null) {
   // soft delete: set deleted_at to today
-  const result = await query("UPDATE students SET deleted_at = CURDATE() WHERE id = ? AND deleted_at IS NULL", [Number(id)]);
+  let sql = "UPDATE students SET deleted_at = CURDATE() WHERE id = ? AND deleted_at IS NULL";
+  const params = [Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+  const result = await query(sql, params);
   return result.affectedRows > 0;
 }
 
-async function undeleteStudent(id) {
+async function undeleteStudent(id, adminId = null) {
   // restore: clear deleted_at
-  const result = await query("UPDATE students SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL", [Number(id)]);
+  let sql = "UPDATE students SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL";
+  const params = [Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+  const result = await query(sql, params);
   return result.affectedRows > 0;
 }
 
-async function blockStudent(id) {
-  const result = await query("UPDATE students SET blocked = 1 WHERE id = ?", [Number(id)]);
+async function blockStudent(id, adminId = null) {
+  let sql = "UPDATE students SET blocked = 1 WHERE id = ?";
+  const params = [Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+  const result = await query(sql, params);
   return result.affectedRows > 0;
 }
 
-async function unblockStudent(id) {
-  const result = await query("UPDATE students SET blocked = 0 WHERE id = ?", [Number(id)]);
+async function unblockStudent(id, adminId = null) {
+  let sql = "UPDATE students SET blocked = 0 WHERE id = ?";
+  const params = [Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+  const result = await query(sql, params);
   return result.affectedRows > 0;
 }
 
-async function studentExists(studentId, email, excludeId = null) {
+async function studentExists(studentId, email, excludeId = null, adminId = null) {
   const params = [studentId, email.toLowerCase()];
   let sql = "SELECT id FROM students WHERE (student_id = ? OR email = ?)";
 
@@ -284,15 +477,28 @@ async function studentExists(studentId, email, excludeId = null) {
     params.push(Number(excludeId));
   }
 
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+
   const rows = await query(sql, params);
   return rows.length > 0;
 }
 
-async function createStudent(name, studentId, email, phone, course) {
-  const result = await query(
-    "INSERT INTO students (name, student_id, email, phone, course, created_at) VALUES (?, ?, ?, ?, ?, CURDATE())",
-    [name, studentId, email.toLowerCase(), phone || null, course || null]
-  );
+async function createStudent(name, studentId, email, phone, course, passwordHash = null, adminId = null) {
+  const cols = ["name", "student_id", "email", "password_hash", "phone", "course", "created_at"];
+  const placeholders = ["?", "?", "?", "?", "?", "?", "CURDATE()"];
+  const params = [name, studentId, email.toLowerCase(), passwordHash, phone || null, course || null];
+
+  if (adminId !== null && adminId !== undefined) {
+    cols.splice(6, 0, "admin_id");
+    placeholders.splice(6, 0, "?");
+    params.splice(6, 0, Number(adminId));
+  }
+
+  const sql = `INSERT INTO students (${cols.join(", ")}) VALUES (${placeholders.join(", ")})`;
+  const result = await query(sql, params);
 
   return {
     id: result.insertId,
@@ -304,11 +510,24 @@ async function createStudent(name, studentId, email, phone, course) {
   };
 }
 
-async function updateStudent(id, name, studentId, email, phone, course) {
-  const result = await query(
-    "UPDATE students SET name = ?, student_id = ?, email = ?, phone = ?, course = ? WHERE id = ?",
-    [name, studentId, email.toLowerCase(), phone || null, course || null, Number(id)]
-  );
+async function updateStudent(id, name, studentId, email, phone, course, passwordHash, adminId = null) {
+  const sets = ["name = ?", "student_id = ?", "email = ?", "phone = ?", "course = ?"];
+  const params = [name, studentId, email.toLowerCase(), phone || null, course || null];
+
+  if (passwordHash !== undefined) {
+    sets.push("password_hash = ?");
+    params.push(passwordHash);
+  }
+
+  let sql = `UPDATE students SET ${sets.join(", ")} WHERE id = ?`;
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+  }
+
+  const finalParams = [...params, Number(id)];
+  if (adminId !== null && adminId !== undefined) finalParams.push(Number(adminId));
+
+  const result = await query(sql, finalParams);
 
   if (result.affectedRows === 0) {
     return null;
@@ -317,10 +536,16 @@ async function updateStudent(id, name, studentId, email, phone, course) {
   return getStudent(id);
 }
 
-async function getAllBooks() {
-  const rows = await query(
-    "SELECT id, title, author, isbn, category, total_copies AS totalCopies, available_copies AS availableCopies, published_year AS publishedYear FROM books ORDER BY id DESC"
-  );
+async function getAllBooks(adminId = null) {
+  let sql = "SELECT id, title, author, isbn, category, total_copies AS totalCopies, available_copies AS availableCopies, published_year AS publishedYear FROM books";
+  const params = [];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " WHERE admin_id = ?";
+    params.push(Number(adminId));
+  }
+  sql += " ORDER BY id DESC";
+
+  const rows = await query(sql, params);
 
   return rows.map((row) => ({
     ...row,
@@ -329,12 +554,19 @@ async function getAllBooks() {
   }));
 }
 
-async function getBook(id) {
-  const rows = await query("SELECT * FROM books WHERE id = ? LIMIT 1", [Number(id)]);
+async function getBook(id, adminId = null) {
+  let sql = "SELECT * FROM books WHERE id = ? LIMIT 1";
+  const params = [Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql = "SELECT * FROM books WHERE id = ? AND admin_id = ? LIMIT 1";
+    params.push(Number(adminId));
+  }
+  const rows = await query(sql, params);
   return rows[0] || null;
 }
 
-async function bookIsbnExists(isbn, excludeId = null) {
+async function bookIsbnExists(isbn, excludeId = null, adminId = null) {
+  if (!isbn) return false;
   const params = [isbn];
   let sql = "SELECT id FROM books WHERE isbn = ?";
 
@@ -343,15 +575,28 @@ async function bookIsbnExists(isbn, excludeId = null) {
     params.push(Number(excludeId));
   }
 
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+
   const rows = await query(sql, params);
   return rows.length > 0;
 }
 
-async function createBook(title, author, isbn, category, totalCopies, publishedYear) {
-  const result = await query(
-    "INSERT INTO books (title, author, isbn, category, total_copies, available_copies, published_year) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [title, author, isbn, category, Number(totalCopies), Number(totalCopies), publishedYear || null]
-  );
+async function createBook(title, author, isbn, category, totalCopies, publishedYear, adminId = null) {
+  const cols = ["title", "author", "isbn", "category", "total_copies", "available_copies", "published_year"];
+  const placeholders = ["?", "?", "?", "?", "?", "?", "?"];
+  const params = [title, author, isbn || null, category, Number(totalCopies), Number(totalCopies), publishedYear || null];
+
+  if (adminId !== null && adminId !== undefined) {
+    cols.push("admin_id");
+    placeholders.push("?");
+    params.push(Number(adminId));
+  }
+
+  const sql = `INSERT INTO books (${cols.join(", ")}) VALUES (${placeholders.join(", ")})`;
+  const result = await query(sql, params);
 
   return {
     id: result.insertId,
@@ -365,8 +610,8 @@ async function createBook(title, author, isbn, category, totalCopies, publishedY
   };
 }
 
-async function updateBook(id, title, author, isbn, category, totalCopies, publishedYear) {
-  const book = await getBook(id);
+async function updateBook(id, title, author, isbn, category, totalCopies, publishedYear, adminId = null) {
+  const book = await getBook(id, adminId);
   if (!book) {
     return null;
   }
@@ -374,10 +619,14 @@ async function updateBook(id, title, author, isbn, category, totalCopies, publis
   const issuedCount = Number(book.total_copies) - Number(book.available_copies);
   const nextAvailable = Math.max(Number(totalCopies) - issuedCount, 0);
 
-  const result = await query(
-    "UPDATE books SET title = ?, author = ?, isbn = ?, category = ?, total_copies = ?, available_copies = ?, published_year = ? WHERE id = ?",
-    [title, author, isbn, category, Number(totalCopies), nextAvailable, publishedYear || null, Number(id)]
-  );
+  let sql = "UPDATE books SET title = ?, author = ?, isbn = ?, category = ?, total_copies = ?, available_copies = ?, published_year = ? WHERE id = ?";
+  const params = [title, author, isbn || null, category, Number(totalCopies), nextAvailable, publishedYear || null, Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+
+  const result = await query(sql, params);
 
   if (result.affectedRows === 0) {
     return null;
@@ -386,25 +635,31 @@ async function updateBook(id, title, author, isbn, category, totalCopies, publis
   return getBook(id);
 }
 
-async function deleteBook(id) {
+async function deleteBook(id, adminId = null) {
   const activeRows = await query("SELECT id FROM issues WHERE book_id = ? AND status = 'issued' LIMIT 1", [Number(id)]);
   if (activeRows.length > 0) {
     return false;
   }
 
-  const result = await query("DELETE FROM books WHERE id = ?", [Number(id)]);
+  let sql = "DELETE FROM books WHERE id = ?";
+  const params = [Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " AND admin_id = ?";
+    params.push(Number(adminId));
+  }
+  const result = await query(sql, params);
   return result.affectedRows > 0;
 }
 
-async function getAllIssues() {
-  const rows = await query(
-    `SELECT
+async function getAllIssues(adminId = null) {
+  let sql = `SELECT
       i.id,
       i.book_id AS bookId,
       i.student_id AS studentId,
       i.issue_date AS issueDate,
       i.due_date AS dueDate,
       i.return_date AS returnDate,
+      i.collected_upto AS collectedUpto,
       i.status,
       i.fine,
       b.title AS bookTitle,
@@ -412,38 +667,56 @@ async function getAllIssues() {
       s.student_id AS studentCode
     FROM issues i
     INNER JOIN books b ON b.id = i.book_id
-    INNER JOIN students s ON s.id = i.student_id
-    ORDER BY i.id DESC`
-  );
+    INNER JOIN students s ON s.id = i.student_id`;
+
+  const params = [];
+  if (adminId !== null && adminId !== undefined) {
+    sql += " WHERE i.admin_id = ?";
+    params.push(Number(adminId));
+  }
+  sql += " ORDER BY i.id DESC";
+
+  const rows = await query(sql, params);
 
   return rows.map((row) => ({
     ...row,
     issueDate: formatDate(row.issueDate),
     dueDate: formatDate(row.dueDate),
     returnDate: formatDate(row.returnDate),
+    collectedUpto: formatDate(row.collectedUpto),
     fine: Number(row.fine || 0)
   }));
 }
 
-async function getIssue(id) {
-  const rows = await query("SELECT * FROM issues WHERE id = ? LIMIT 1", [Number(id)]);
+async function getIssue(id, adminId = null) {
+  let sql = "SELECT * FROM issues WHERE id = ? LIMIT 1";
+  const params = [Number(id)];
+  if (adminId !== null && adminId !== undefined) {
+    sql = "SELECT * FROM issues WHERE id = ? AND admin_id = ? LIMIT 1";
+    params.push(Number(adminId));
+  }
+  const rows = await query(sql, params);
   return rows[0] || null;
 }
 
-async function createIssue(bookId, studentId, dueDate) {
+async function createIssue(bookId, studentId, dueDate, adminId = null) {
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
 
-    const [bookRows] = await connection.query("SELECT * FROM books WHERE id = ? FOR UPDATE", [Number(bookId)]);
+    const bookQuery = adminId !== null && adminId !== undefined ? "SELECT * FROM books WHERE id = ? AND admin_id = ? FOR UPDATE" : "SELECT * FROM books WHERE id = ? FOR UPDATE";
+    const bookQueryParams = adminId !== null && adminId !== undefined ? [Number(bookId), Number(adminId)] : [Number(bookId)];
+    const [bookRows] = await connection.query(bookQuery, bookQueryParams);
     const book = bookRows[0];
     if (!book || Number(book.available_copies) < 1) {
       await connection.rollback();
       return null;
     }
 
-    const [studentRows] = await connection.query("SELECT id FROM students WHERE id = ? LIMIT 1", [Number(studentId)]);
+    const studentQuery = adminId !== null && adminId !== undefined ? "SELECT id FROM students WHERE id = ? AND admin_id = ? LIMIT 1" : "SELECT id FROM students WHERE id = ? LIMIT 1";
+    const studentQueryParams = adminId !== null && adminId !== undefined ? [Number(studentId), Number(adminId)] : [Number(studentId)];
+    const [studentRows] = await connection.query(studentQuery, studentQueryParams);
     if (studentRows.length === 0) {
       await connection.rollback();
       return null;
@@ -453,6 +726,29 @@ async function createIssue(bookId, studentId, dueDate) {
     if (blockedRows.length > 0 && blockedRows[0].blocked) {
       await connection.rollback();
       return null;
+    }
+
+    // insert with admin_id when available
+    if (adminId !== null && adminId !== undefined) {
+      const [result] = await connection.query(
+        "INSERT INTO issues (admin_id, book_id, student_id, issue_date, due_date, return_date, status, fine) VALUES (?, ?, ?, CURDATE(), ?, NULL, 'issued', 0)",
+        [Number(adminId), Number(bookId), Number(studentId), dueDate]
+      );
+
+      await connection.query(
+        "UPDATE books SET available_copies = available_copies - 1 WHERE id = ?",
+        [Number(bookId)]
+      );
+
+      await connection.commit();
+
+      return {
+        id: result.insertId,
+        book_id: Number(bookId),
+        student_id: Number(studentId),
+        due_date: dueDate,
+        status: "issued"
+      };
     }
 
     const [result] = await connection.query(
@@ -527,13 +823,92 @@ async function returnIssue(id) {
   }
 }
 
-async function getReportSummary() {
+async function collectFine(id) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [issueRows] = await connection.query("SELECT * FROM issues WHERE id = ? FOR UPDATE", [Number(id)]);
+    const issue = issueRows[0];
+    if (!issue) {
+      await connection.rollback();
+      return null;
+    }
+    console.log(`[STORE] collectFine starting for issue ${id}:`, issue);
+
+    // determine current outstanding fine
+    let outstanding = 0;
+
+    const todayDate = formatDate(new Date());
+    const due = toUtcDateOnly(issue.due_date);
+
+    if (issue.status === 'returned') {
+      outstanding = Number(issue.fine || 0);
+      // mark collected up to return_date
+      await connection.query("UPDATE issues SET fine = 0, collected_upto = ? WHERE id = ?", [formatDate(issue.return_date || todayDate), Number(id)]);
+      console.log(`[STORE] collectFine updated returned issue ${id}, set collected_upto=${formatDate(issue.return_date || todayDate)}`);
+    } else {
+      // issue still active: compute overdue days up to today minus previously collected days
+      const returned = toUtcDateOnly(todayDate);
+      const totalOverdueDays = due && returned ? Math.max(0, Math.ceil((returned.getTime() - due.getTime()) / MS_PER_DAY)) : 0;
+      let alreadyCollectedDays = 0;
+      if (issue.collected_upto) {
+        const collectedDt = toUtcDateOnly(issue.collected_upto);
+        alreadyCollectedDays = due && collectedDt ? Math.max(0, Math.ceil((collectedDt.getTime() - due.getTime()) / MS_PER_DAY)) : 0;
+      }
+      const outstandingDays = Math.max(0, totalOverdueDays - alreadyCollectedDays);
+      outstanding = outstandingDays * FINE_PER_DAY;
+
+      // update collected_upto to today and clear stored fine
+      await connection.query("UPDATE issues SET fine = 0, collected_upto = ? WHERE id = ?", [todayDate, Number(id)]);
+      console.log(`[STORE] collectFine updated active issue ${id}, set collected_upto=${todayDate}`);
+    }
+
+    await connection.commit();
+
+    return { id: Number(id), collected: outstanding };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function getReportSummary(adminId = null) {
+  const bookSql = adminId !== null && adminId !== undefined
+    ? "SELECT COALESCE(SUM(total_copies), 0) AS totalBooks FROM books WHERE admin_id = ?"
+    : "SELECT COALESCE(SUM(total_copies), 0) AS totalBooks FROM books";
+  const issueSql = adminId !== null && adminId !== undefined
+    ? "SELECT COUNT(*) AS issuedCount FROM issues WHERE status = 'issued' AND admin_id = ?"
+    : "SELECT COUNT(*) AS issuedCount FROM issues WHERE status = 'issued'";
+  const overdueSql = adminId !== null && adminId !== undefined
+    ? "SELECT COUNT(*) AS overdueCount FROM issues WHERE status = 'issued' AND due_date < CURDATE() AND (collected_upto IS NULL OR collected_upto < CURDATE()) AND admin_id = ?"
+    : "SELECT COUNT(*) AS overdueCount FROM issues WHERE status = 'issued' AND due_date < CURDATE() AND (collected_upto IS NULL OR collected_upto < CURDATE())";
+  const fineSql = adminId !== null && adminId !== undefined
+    ? "SELECT COALESCE(SUM(fine), 0) AS fineTotal FROM issues WHERE admin_id = ?"
+    : "SELECT COALESCE(SUM(fine), 0) AS fineTotal FROM issues";
+  const runningFineSql = adminId !== null && adminId !== undefined
+    ? `SELECT COALESCE(SUM(
+         GREATEST(
+           GREATEST(DATEDIFF(CURDATE(), due_date), 0) - COALESCE(GREATEST(DATEDIFF(collected_upto, due_date), 0), 0),
+          0
+         ) * ?
+      ), 0) AS runningFine FROM issues WHERE status = 'issued' AND admin_id = ?`
+    : `SELECT COALESCE(SUM(
+         GREATEST(
+           GREATEST(DATEDIFF(CURDATE(), due_date), 0) - COALESCE(GREATEST(DATEDIFF(collected_upto, due_date), 0), 0),
+          0
+         ) * ?
+      ), 0) AS runningFine FROM issues WHERE status = 'issued'`;
+
   const [bookRows, issueRows, overdueRows, fineRows, runningFineRows] = await Promise.all([
-    query("SELECT COALESCE(SUM(total_copies), 0) AS totalBooks FROM books"),
-    query("SELECT COUNT(*) AS issuedCount FROM issues WHERE status = 'issued'"),
-    query("SELECT COUNT(*) AS overdueCount FROM issues WHERE status = 'issued' AND due_date < CURDATE()"),
-    query("SELECT COALESCE(SUM(fine), 0) AS fineTotal FROM issues"),
-    query("SELECT COALESCE(SUM(GREATEST(DATEDIFF(CURDATE(), due_date), 0) * ?), 0) AS runningFine FROM issues WHERE status = 'issued'", [FINE_PER_DAY])
+    query(bookSql, adminId !== null && adminId !== undefined ? [Number(adminId)] : []),
+    query(issueSql, adminId !== null && adminId !== undefined ? [Number(adminId)] : []),
+    query(overdueSql, adminId !== null && adminId !== undefined ? [Number(adminId)] : []),
+    query(fineSql, adminId !== null && adminId !== undefined ? [Number(adminId)] : []),
+    query(runningFineSql, adminId !== null && adminId !== undefined ? [FINE_PER_DAY, Number(adminId)] : [FINE_PER_DAY])
   ]);
 
   return {
@@ -551,6 +926,7 @@ module.exports = {
   updateAdmin,
   getAdminById,
   createAdmin,
+  getStudentByStudentId,
   deleteStudent,
   undeleteStudent,
   blockStudent,
@@ -570,5 +946,6 @@ module.exports = {
   getIssue,
   createIssue,
   returnIssue,
+  collectFine,
   getReportSummary
 };

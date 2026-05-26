@@ -12,6 +12,7 @@
 			<h1>Library Management System</h1>
 			<div id="sessionPanel" class="session-panel hidden">
 				<span id="welcomeText"></span>
+				<button id="darkModeToggle" class="btn btn-light" aria-label="Toggle dark mode">🌙</button>
 				<button id="logoutBtn" class="btn btn-danger">Logout</button>
 			</div>
 		</header>
@@ -40,6 +41,8 @@
 						</form>
 					</div>
 				</div>
+
+
 
 				<div id="adminRegisterTab" class="tab-content">
 					<h2>Admin Registration</h2>
@@ -73,6 +76,49 @@
 
 				<section id="dashboardModule" class="module card active">
 					<h2>Simple Dashboard</h2>
+					<!-- Student dashboard (shown to students) -->
+					<div id="studentDashboard" class="student-dashboard hidden">
+						<div class="profile-card">
+							<h3>Student Profile</h3>
+							<p><strong>Name:</strong> <span id="studentProfileName">-</span></p>
+							<p><strong>Student ID:</strong> <span id="studentProfileId">-</span></p>
+							<p><strong>Course:</strong> <span id="studentProfileCourse">-</span></p>
+						</div>
+						<div class="student-summary">
+							<article class="stat-card">
+								<h4>Total Issued</h4>
+								<p id="studentTotalIssued">0</p>
+							</article>
+							<article class="stat-card">
+								<h4>Due / Overdue</h4>
+								<p id="studentDueCount">0</p>
+							</article>
+							<article class="stat-card">
+								<h4>Next Return</h4>
+								<p id="studentNextReturn">-</p>
+							</article>
+							<article class="stat-card">
+								<h4>Total Fine</h4>
+								<p id="studentTotalFine">₹0</p>
+							</article>
+						</div>
+						<div class="student-history">
+							<h4>Issue History</h4>
+							<table class="table">
+								<thead>
+									<tr>
+										<th>Book</th>
+										<th>Issue Date</th>
+										<th>Due Date</th>
+										<th>Return Date</th>
+										<th>Status</th>
+										<th>Fine</th>
+									</tr>
+								</thead>
+								<tbody id="studentIssueHistory"></tbody>
+							</table>
+						</div>
+					</div>
 					<div class="stat-grid">
 						<article class="stat-card">
 							<h3>Total Books</h3>
@@ -92,6 +138,8 @@
 						</article>
 					</div>
 
+				
+
 					<div class="chart-grid">
 						<div class="chart-card">
 							<h3>Book Availability Chart</h3>
@@ -106,7 +154,15 @@
 
 				<section id="userModule" class="module card">
 					<h2>User Management</h2>
-					<div id="studentRegisterPanel">
+					<div class="user-tabs">
+						<button class="user-tab-btn active" data-tab="allUsersPanel">All Students</button>
+						<button class="user-tab-btn" data-tab="regPanel">Student Registration</button>
+						<button class="user-tab-btn" data-tab="updPanel">Update Student Details</button>
+						<button class="user-tab-btn" data-tab="adminPanel">Update Admin Profile</button>
+					</div>
+
+		 			<div id="regPanel" class="user-tab-panel hidden">
+						<div id="studentRegisterPanel">
 						<h3>Student Registration (Admin Only)</h3>
 						<form id="studentRegisterForm" class="form-grid compact">
 							<label>Full Name
@@ -124,17 +180,23 @@
 							<label>Phone
 								<input type="text" id="regPhone" required>
 							</label>
+								<label>Password
+									<input type="password" id="regPassword" minlength="4" required placeholder="Set student password">
+								</label>
 							<button type="submit" class="btn btn-primary">Register Student</button>
 						</form>
+						</div>
 					</div>
 
-					<form id="profileUpdateForm" class="form-grid compact">
-						<h3>Update Student Detail</h3>
-						<label>Select Student
-							<select id="updTargetStudent" required>
-								<option value="">Select a student</option>
-							</select>
-						</label>
+					<div id="updPanel" class="user-tab-panel hidden">
+						<form id="profileUpdateForm" class="form-grid compact">
+							<h3>Update Student Detail</h3>
+							<div class="search-panel">
+								<input type="text" id="updateStudentSearch" placeholder="Search student by name, ID, email or phone">
+							</div>
+							<div class="search-suggestions" id="updSearchSuggestions" aria-live="polite"></div>
+						<!-- Hidden selected student id (populated from search) -->
+						<input type="hidden" id="updTargetStudent">
 						<label>Name
 							<input type="text" id="updName" required>
 						</label>
@@ -150,15 +212,20 @@
 						<label>Course
 							<input type="text" id="updCourse">
 						</label>
+							<label>Reset Password
+								<input type="password" id="updPassword" minlength="4" placeholder="Leave blank to keep existing password">
+							</label>
 						<div class="btn-row">
 							<button type="submit" class="btn btn-secondary">Update</button>
 							<button type="reset" id="clearProfileForm" class="btn btn-light">Clear</button>
 						</div>
-					</form>
+						</form>
+					</div>
 
 					<!-- Admin update form (admins only) -->
-					<form id="adminUpdateForm" class="form-grid compact">
-						<h3>Update Admin Profile</h3>
+					<div id="adminPanel" class="user-tab-panel hidden">
+						<form id="adminUpdateForm" class="form-grid compact">
+							<h3>Update Admin Profile</h3>
 						<label>Name
 							<input type="text" id="adminUpdName" required>
 						</label>
@@ -175,10 +242,15 @@
 							<button type="submit" class="btn btn-secondary">Update Admin</button>
 							<button type="reset" id="clearAdminForm" class="btn btn-light">Clear</button>
 						</div>
-					</form>
+						</form>
+					</div>
 
-					<div id="allUsersPanel" class="mt-2">
+					<div id="allUsersPanel" class="user-tab-panel active mt-2">
 						<h3>All Students</h3>
+						<div class="search-panel">
+							<h3 class="sr-only">Search Students</h3>
+							<input type="text" id="userSearch" placeholder="Search by name, student ID, email or phone">
+						</div>
 						<div class="table-wrap">
 							<table>
 								<thead>
@@ -200,60 +272,114 @@
 
 				<section id="bookModule" class="module card">
 					<h2>Book Management</h2>
-					<div id="bookCrudPanel">
-						<form id="bookForm" class="form-grid compact">
-							<h3>Add / Update Book</h3>
-							<input type="hidden" id="bookId">
+					<div class="book-tabs">
+						<button class="book-tab-btn active" data-tab="bookListPanel">Books List</button>
+						<button class="book-tab-btn" data-tab="addBookPanel">Add Book</button>
+						<button class="book-tab-btn" data-tab="updateBookPanel">Update Book</button>
+					</div>
+
+					<div id="bookListPanel" class="book-tab-panel active">
+						<div class="search-panel">
+							<h3>Search Book (Title/Author)</h3>
+							<input type="text" id="bookSearch" placeholder="Search by title or author">
+						</div>
+
+						<div class="tab-title-bar">
+							<div class="title-left">
+								<h3>Books List <span id="booksCount" class="badge">0</span></h3>
+							</div>
+							<div class="title-right">
+								<button id="bookAddBtn" class="btn btn-primary">Add Book</button>
+							</div>
+						</div>
+
+						<div class="table-wrap mt-1">
+							<table>
+								<thead>
+									<tr>
+										<th>ID</th>
+										<th>Title</th>
+										<th>Author</th>
+										<!-- ISBN column removed -->
+										<th>Category</th>
+										<th>Availability</th>
+										<th id="bookActionHeader">Actions</th>
+									</tr>
+								</thead>
+								<tbody id="booksTableBody"></tbody>
+							</table>
+						</div>
+					</div>
+
+					<div id="addBookPanel" class="book-tab-panel hidden">
+						<div id="bookCrudPanel">
+							<form id="bookForm" class="form-grid compact">
+								<h3>Add Book</h3>
+								<input type="hidden" id="bookId">
+								<label>Title
+									<input type="text" id="bookTitle" required>
+								</label>
+								<label>Author
+									<input type="text" id="bookAuthor" required>
+								</label>
+								<!-- ISBN removed from Add Book form -->
+								<label>Category
+									<input type="text" id="bookCategory" required>
+								</label>
+								<label>Total Copies
+									<input type="number" id="bookTotalCopies" min="1" required>
+								</label>
+								<label>Published Year
+									<input type="number" id="bookYear" min="1500" max="2100" required>
+								</label>
+								<div class="btn-row">
+									<button type="submit" class="btn btn-primary">Save Book</button>
+									<button type="button" id="resetBookForm" class="btn btn-light">Reset</button>
+								</div>
+							</form>
+						</div>
+					</div>
+
+					<div id="updateBookPanel" class="book-tab-panel hidden">
+						<h3>Update Book</h3>
+						<p class="form-note">Select a book below to edit its details in the form.</p>
+						<div class="search-panel">
+							<input type="text" id="updateBookSearch" placeholder="Search book by title, author or category" autocomplete="off">
+						</div>
+						<div class="search-suggestions" id="updateBookSuggestions" aria-live="polite"></div>
+						<form id="updateBookForm" class="form-grid compact mt-1">
+							<input type="hidden" id="updateBookId">
 							<label>Title
-								<input type="text" id="bookTitle" required>
+								<input type="text" id="updateBookTitle" required>
 							</label>
 							<label>Author
-								<input type="text" id="bookAuthor" required>
+								<input type="text" id="updateBookAuthor" required>
 							</label>
-							<label>ISBN
-								<input type="text" id="bookIsbn" required>
-							</label>
+							<!-- ISBN removed from Update Book form -->
 							<label>Category
-								<input type="text" id="bookCategory" required>
+								<input type="text" id="updateBookCategory" required>
 							</label>
 							<label>Total Copies
-								<input type="number" id="bookTotalCopies" min="1" required>
+								<input type="number" id="updateBookTotalCopies" min="1" required>
 							</label>
 							<label>Published Year
-								<input type="number" id="bookYear" min="1500" max="2100" required>
+								<input type="number" id="updateBookYear" min="1500" max="2100" required>
 							</label>
 							<div class="btn-row">
-								<button type="submit" class="btn btn-primary">Save Book</button>
-								<button type="button" id="resetBookForm" class="btn btn-light">Reset</button>
+								<button type="submit" class="btn btn-secondary">Update Book</button>
+								<button type="button" id="resetUpdateBookForm" class="btn btn-light">Reset</button>
 							</div>
 						</form>
-					</div>
-
-					<div class="search-panel">
-						<h3>Search Book (Title/Author)</h3>
-						<input type="text" id="bookSearch" placeholder="Search by title or author">
-					</div>
-
-					<div class="table-wrap mt-1">
-						<table>
-							<thead>
-								<tr>
-									<th>ID</th>
-									<th>Title</th>
-									<th>Author</th>
-									<th>ISBN</th>
-									<th>Category</th>
-									<th>Availability</th>
-									<th id="bookActionHeader">Actions</th>
-								</tr>
-							</thead>
-							<tbody id="booksTableBody"></tbody>
-						</table>
 					</div>
 				</section>
 
 				<section id="issueModule" class="module card">
 					<h2>Issue & Return Module</h2>
+					<div class="issue-tabs">
+						<button class="issue-tab-btn active" data-tab="issueFormPanel">Issue Book</button>
+						<button class="issue-tab-btn" data-tab="allIssuedPanel">All Issued Books</button>
+					</div>
+					<div id="issueFormPanel" class="issue-tab-panel active">
 					<form id="issueForm" class="form-grid compact">
 						<h3>Issue Book</h3>
 						<label>Book
@@ -274,33 +400,39 @@
 						<label>Due Date
 							<input type="date" id="issueDueDate" required>
 						</label>
-						<button type="submit" class="btn btn-primary">Issue Book</button>
+						<div class="btn-row">
+							<button type="submit" class="btn btn-primary">Issue Book</button>
+							<button type="button" id="clearIssueForm" class="btn btn-light">Clear</button>
+						</div>
 					</form>
+					</div>
 
-					<div class="table-wrap mt-2">
-						<table>
-							<thead>
-								<tr>
-									<th>Issue ID</th>
-									<th>Book</th>
-									<th>Student</th>
-									<th>Student ID</th>
-									<th>Issue Date</th>
-									<th>Due Date</th>
-									<th>Return Date</th>
-									<th>Status</th>
-									<th>Fine</th>
-									<th>Action</th>
-								</tr>
-							</thead>
-							<tbody id="issuesTableBody"></tbody>
-						</table>
+					<div id="allIssuedPanel" class="issue-tab-panel hidden mt-2">
+						<div class="table-wrap">
+							<table>
+								<thead>
+									<tr>
+										<th>Issue ID</th>
+										<th>Book</th>
+										<th>Student</th>
+										<th>Student ID</th>
+										<th>Issue Date</th>
+										<th>Due Date</th>
+										<th>Return Date</th>
+										<th>Status</th>
+										<th>Fine</th>
+										<th>Action</th>
+									</tr>
+								</thead>
+								<tbody id="issuesTableBody"></tbody>
+							</table>
+						</div>
 					</div>
 				</section>
 
 				<section id="reportModule" class="module card">
 					<h2>Reports & Dashboard</h2>
-					<div class="report-grid">
+					<div id="reportListsWrap" class="report-grid">
 						<article class="report-card">
 							<h3>Total Book Count</h3>
 							<p id="reportTotalBooks">0</p>
@@ -338,6 +470,67 @@
 						</div>
 					</div>
 				</section>
+			</section>
+
+			<section id="studentProfileModule" class="module card">
+				<h2>Your Profile</h2>
+				<form id="studentProfileForm" class="form-grid">
+					<label>Full Name
+						<input type="text" id="stuName">
+					</label>
+					<label>Student ID
+						<input type="text" id="stuStudentId" disabled>
+					</label>
+					<label>E-Mail
+						<input type="email" id="stuEmail">
+					</label>
+					<label>Mobile
+						<input type="text" id="stuPhone">
+					</label>
+					<label>Course
+						<input type="text" id="stuCourse">
+					</label>
+					<label>New Password
+						<input type="password" id="stuNewPassword" minlength="4" placeholder="Leave blank to keep existing">
+					</label>
+					<div class="btn-row">
+						<button type="submit" class="btn btn-primary">Update Profile</button>
+					</div>
+				</form>
+			</section>
+
+			<section id="studentIssuedModule" class="module card">
+				<h2>Currently Issued Books</h2>
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th>Book Name</th>
+								<th>Issue Date</th>
+								<th>Due Date</th>
+								<th>Status</th>
+							</tr>
+						</thead>
+						<tbody id="studentIssuedTableBody"></tbody>
+					</table>
+				</div>
+			</section>
+
+			<section id="studentHistoryModule" class="module card">
+				<h2>Book History</h2>
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th>Book Name</th>
+								<th>Issue Date</th>
+								<th>Return Date</th>
+								<th>Status</th>
+							</tr>
+						</thead>
+						<tbody id="studentHistoryTableBody"></tbody>
+					</table>
+				</div>
 			</section>
 		</main>
 	</div>

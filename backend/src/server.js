@@ -14,6 +14,12 @@ const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json());
 
+// simple request logger for debugging
+app.use((req, res, next) => {
+  try { console.log(`[REQ] ${req.method} ${req.originalUrl}`); } catch (e) {}
+  next();
+});
+
 app.get("/api/health", async (_req, res) => {
   try {
     await store.getReportSummary();
@@ -40,8 +46,14 @@ async function startServer() {
     await store.initializeDatabase();
     console.log("MySQL initialized successfully");
   } catch (error) {
-    console.error("Failed to initialize MySQL:", error.message);
-    process.exit(1);
+    console.error("Failed to initialize MySQL:", error && error.stack ? error.stack : error);
+    // Keep process alive for debugging if NODE_ENV is not production
+    if ((process.env.NODE_ENV || '').toLowerCase() === 'production') {
+      process.exit(1);
+    } else {
+      console.error('Development mode: server will not start until DB is available. Fix DB and restart.');
+      return;
+    }
   }
 
   app.listen(port, () => {

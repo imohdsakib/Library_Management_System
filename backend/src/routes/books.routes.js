@@ -9,7 +9,8 @@ router.get("/", async (req, res) => {
   const q = (req.query.q || "").trim().toLowerCase();
 
   try {
-    const books = await store.getAllBooks();
+    const adminId = req.user && req.user.id ? req.user.id : null;
+    const books = await store.getAllBooks(adminId);
 
     const filtered = q
       ? books.filter((b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q))
@@ -23,8 +24,8 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const { title, author, isbn, category, totalCopies, publishedYear } = req.body;
-  if (!title || !author || !isbn || !category || totalCopies == null) {
-    return res.status(400).json({ message: "title, author, isbn, category, totalCopies are required" });
+  if (!title || !author || !category || totalCopies == null) {
+    return res.status(400).json({ message: "title, author, category, totalCopies are required" });
   }
 
   const total = Number(totalCopies);
@@ -33,18 +34,23 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const exists = await store.bookIsbnExists(isbn.trim());
-    if (exists) {
-      return res.status(409).json({ message: "ISBN already exists" });
+    const isbnVal = (isbn || '').trim();
+    const adminId = req.user && req.user.id ? req.user.id : null;
+    if (isbnVal) {
+      const exists = await store.bookIsbnExists(isbnVal, undefined, adminId);
+      if (exists) {
+        return res.status(409).json({ message: "ISBN already exists" });
+      }
     }
 
     const book = await store.createBook(
       title.trim(),
       author.trim(),
-      isbn.trim(),
+      isbnVal || null,
       category.trim(),
       total,
-      publishedYear || null
+      publishedYear || null,
+      adminId
     );
 
     return res.status(201).json({ id: book.id, message: "Book created" });
@@ -57,8 +63,8 @@ router.put("/:id", async (req, res) => {
   const { id } = req.params;
   const { title, author, isbn, category, totalCopies, publishedYear } = req.body;
 
-  if (!title || !author || !isbn || !category || totalCopies == null) {
-    return res.status(400).json({ message: "title, author, isbn, category, totalCopies are required" });
+  if (!title || !author || !category || totalCopies == null) {
+    return res.status(400).json({ message: "title, author, category, totalCopies are required" });
   }
 
   const total = Number(totalCopies);
@@ -67,19 +73,24 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    const dupes = await store.bookIsbnExists(isbn.trim(), Number(id));
-    if (dupes) {
-      return res.status(409).json({ message: "ISBN already exists" });
+    const isbnVal = (isbn || '').trim();
+    const adminId = req.user && req.user.id ? req.user.id : null;
+    if (isbnVal) {
+      const dupes = await store.bookIsbnExists(isbnVal, Number(id), adminId);
+      if (dupes) {
+        return res.status(409).json({ message: "ISBN already exists" });
+      }
     }
 
     const book = await store.updateBook(
       id,
       title.trim(),
       author.trim(),
-      isbn.trim(),
+      isbnVal || null,
       category.trim(),
       total,
-      publishedYear || null
+      publishedYear || null,
+      adminId
     );
 
     if (!book) {
@@ -95,7 +106,8 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const deleted = await store.deleteBook(id);
+    const adminId = req.user && req.user.id ? req.user.id : null;
+    const deleted = await store.deleteBook(id, adminId);
     if (!deleted) {
       return res.status(404).json({ message: "Book not found or has active issues" });
     }

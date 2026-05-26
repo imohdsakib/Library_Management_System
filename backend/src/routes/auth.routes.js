@@ -67,6 +67,64 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.post("/student-login", async (req, res) => {
+  const { studentId, password } = req.body;
+
+  if (!studentId || !password) {
+    return res.status(400).json({ message: "studentId and password are required" });
+  }
+
+  try {
+    const student = await store.getStudentByStudentId(studentId.trim());
+
+    if (!student || student.deleted_at) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    if (student.blocked) {
+      return res.status(403).json({ message: "Student account is blocked" });
+    }
+
+    if (!student.password_hash) {
+      return res.status(403).json({ message: "Password not set. Ask admin to reset it." });
+    }
+
+    const ok = await bcrypt.compare(password, student.password_hash);
+    if (!ok) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      {
+        id: student.id,
+        role: "student",
+        studentId: student.student_id,
+        email: student.email,
+        name: student.name,
+        phone: student.phone,
+        course: student.course
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "12h" }
+    );
+
+    return res.json({
+      token,
+      user: {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+        course: student.course,
+        studentId: student.student_id,
+        role: "student"
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ message: "Student login failed", error: err.message });
+  }
+});
+
 // Update current admin details (protected)
 router.put("/me", requireAuth, async (req, res) => {
   try {

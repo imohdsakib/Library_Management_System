@@ -3,11 +3,28 @@ const store = require("../lib/mysqlStore");
 const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
+
+// Temporary debug route (unprotected) to inspect issues during debugging.
+router.get('/_debug/all', async (_req, res) => {
+  try {
+    console.log('[DEBUG] /api/issues/_debug/all called');
+    const issues = await store.getAllIssues();
+    return res.json(issues);
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch issues (debug)', error: err.message });
+  }
+});
+
 router.use(requireAuth);
 
 router.get("/", async (_req, res) => {
   try {
-    const issues = await store.getAllIssues();
+    const adminId = _req.user && _req.user.role === 'admin' ? _req.user.id : null;
+    const issues = await store.getAllIssues(adminId);
+    if (_req.user && _req.user.role === "student") {
+      return res.json(issues.filter((issue) => String(issue.studentId) === String(_req.user.id)));
+    }
+
     return res.json(issues);
   } catch (err) {
     return res.status(500).json({ message: "Failed to fetch issues", error: err.message });
@@ -21,7 +38,8 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const issue = await store.createIssue(bookId, studentId, dueDate);
+    const adminId = req.user && req.user.role === 'admin' ? req.user.id : null;
+    const issue = await store.createIssue(bookId, studentId, dueDate, adminId);
     if (!issue) {
       return res.status(400).json({ message: "Book unavailable or student not found" });
     }
@@ -42,6 +60,31 @@ router.post("/:id/return", async (req, res) => {
     return res.json({ message: "Book returned", fine: issue.fine });
   } catch (err) {
     return res.status(500).json({ message: "Failed to return book", error: err.message });
+  }
+});
+
+router.post("/:id/collect", async (req, res) => {
+  const { id } = req.params;
+  console.log(`[ROUTE] collect called for issue ${id} by user ${JSON.stringify(req.user || {})}`);
+
+  try {
+    const adminId = req.user && req.user.role === 'admin' ? req.user.id : null;
+    const issue = await store.getIssue(id, adminId);
+    if (!issue) return res.status(404).json({ message: "Issue not found" });
+
+    // allow admin or the student who owns the issue to collect fine
+    const user = req.user || {};
+    if (user.role !== 'admin' && String(user.id) !== String(issue.student_id)) {
+      return res.status(403).json({ message: 'Not authorized to collect this fine' });
+    }
+
+    const result = await store.collectFine(id);
+    console.log(`[ROUTE] collect result for issue ${id}: ${JSON.stringify(result)}`);
+    if (!result) return res.status(404).json({ message: 'Failed to collect fine' });
+
+    return res.json({ message: 'Fine collected', collected: result.collected });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to collect fine', error: err.message });
   }
 });
 
