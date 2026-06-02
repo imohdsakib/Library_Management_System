@@ -8,6 +8,26 @@ const router = express.Router();
 
 const crypto = require('crypto');
 const storeHelpers = require('../lib/mysqlStore');
+const nodemailer = require('nodemailer');
+
+// configure mailer if SMTP settings present
+let mailer = null;
+if (process.env.SMTP_USER) {
+  try {
+    mailer = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'localhost',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: (process.env.SMTP_SECURE || 'false') === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+  } catch (e) {
+    console.error('[AUTH] Failed to configure mailer', e.message);
+    mailer = null;
+  }
+}
 
 router.post("/register-admin", async (req, res) => {
   const { name, email, password, phone } = req.body;
@@ -85,13 +105,33 @@ router.post('/forgot-password', async (req, res) => {
 
     await store.createPasswordReset(admin.email, token, expiresAt);
 
-    // Build reset link (frontend will accept token)
-    const resetLink = `${process.env.FRONTEND_URL || ''}/frontend/index.html?reset=${token}`;
+    // Build reset link (frontend reset page accepts ?token=...)
+    const resetLink = `${process.env.FRONTEND_URL || ''}/reset.html?token=${token}`;
 
-    // For now, console fallback: log the link and also return token in response for convenience
+    // Try to send email if mailer configured
+    if (mailer) {
+      try {
+        const fromAddr = process.env.EMAIL_FROM || process.env.SMTP_USER;
+        await mailer.sendMail({
+          from: fromAddr,
+          to: admin.email,
+          subject: 'Library Management System - Password Reset',
+          html: `<p>We received a request to reset your admin password. Click the link below to set a new password (link valid for 1 hour):</p>
+                 <p><a href="${resetLink}">${resetLink}</a></p>
+                 <p>If you didn't request this, ignore this email.</p>`
+        });
+
+        console.log(`[AUTH] Sent password reset email to ${admin.email}`);
+        return res.json({ message: 'Password reset email sent. Check your inbox.' });
+      } catch (mailErr) {
+        console.error('[AUTH] Failed to send reset email', mailErr && mailErr.message);
+        // fallback to console/logging below
+      }
+    }
+
+    // Console fallback for development: log the link and return token for convenience
     console.log(`[AUTH] Password reset for ${admin.email}: ${resetLink}`);
-
-    return res.json({ message: 'Password reset initiated. Check logs or use the token to reset.', token });
+    return res.json({ message: 'Password reset initiated. Check server logs or your email (if configured).', token });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to create reset token', error: err.message });
   }
