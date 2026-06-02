@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reset Password</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="card auth-card">
+    <h2>Reset Password</h2>
+    <p id="msg" class="form-note">Enter the token you received and set a new password.</p>
+    <form id="resetPageForm" class="form-grid compact">
+      <label>Reset Token
+        <input type="text" id="pageResetToken" required>
+      </label>
+      <label>New Password
+        <input type="password" id="pageResetPassword" minlength="4" required>
+      </label>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">Reset Password</button>
+        <button type="button" id="cancelToLogin" class="btn btn-light">Back to Login</button>
+      </div>
+    </form>
+    <p class="form-note">Tip: if you clicked a reset link, the token may be present in the URL as <code>?token=...</code>.</p>
+  </main>
+
+  <script>
+    const API_BASE = 'http://localhost:5000/api';
+    const params = new URLSearchParams(window.location.search);
+    const tokenInput = document.getElementById('pageResetToken');
+    const pwdInput = document.getElementById('pageResetPassword');
+    const form = document.getElementById('resetPageForm');
+    const msg = document.getElementById('msg');
+    const cancelBtn = document.getElementById('cancelToLogin');
+
+    if (params.get('token')) {
+      tokenInput.value = params.get('token');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = tokenInput.value.trim();
+      const password = pwdInput.value.trim();
+      if (!token || !password) { alert('Provide token and new password'); return; }
+      try {
+        const res = await fetch(`${API_BASE}/auth/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Reset failed');
+        alert(data.message || 'Password reset successful');
+        window.location.href = 'index.html';
+      } catch (err) {
+        alert(err.message || 'Reset failed');
+      }
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

@@ -271,7 +271,18 @@ function bindEvents() {
     elements.loginForm.addEventListener("submit", handleLogin);
     if (elements.forgotPasswordLink) elements.forgotPasswordLink.addEventListener('click', (e) => {
         e.preventDefault();
-        switchTab('forgotTab');
+        // Offer two options: in-page forgot flow or separate reset page
+        try {
+            const openSeparate = confirm('Open separate reset page?\nOK = Open reset page (recommended), Cancel = Use in-page flow');
+            if (openSeparate) {
+                // open dedicated reset page (supports ?token=... prefill)
+                window.location.href = 'reset.html';
+            } else {
+                switchTab('forgotTab');
+            }
+        } catch (err) {
+            switchTab('forgotTab');
+        }
     });
 
     if (elements.forgotForm) elements.forgotForm.addEventListener('submit', handleForgotPassword);
