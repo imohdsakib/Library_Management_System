@@ -170,6 +170,16 @@ const elements = {
     resetUpdateBookForm: document.getElementById("resetUpdateBookForm")
 };
 
+// Forgot password elements (initialized after DOM)
+elements.forgotPasswordLink = document.getElementById('forgotPasswordLink');
+elements.forgotForm = document.getElementById('forgotForm');
+elements.forgotEmail = document.getElementById('forgotEmail');
+elements.resetForm = document.getElementById('resetForm');
+elements.resetToken = document.getElementById('resetToken');
+elements.resetPassword = document.getElementById('resetPassword');
+elements.backToLogin = document.getElementById('backToLogin');
+elements.cancelReset = document.getElementById('cancelReset');
+
 async function initApp() {
     loadState();
     bindEvents();
@@ -259,6 +269,18 @@ function bindEvents() {
     }
 
     elements.loginForm.addEventListener("submit", handleLogin);
+    if (elements.forgotPasswordLink) elements.forgotPasswordLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchTab('forgotTab');
+    });
+
+    if (elements.forgotForm) elements.forgotForm.addEventListener('submit', handleForgotPassword);
+    if (elements.backToLogin) elements.backToLogin.addEventListener('click', () => switchTab('loginTab'));
+    if (elements.resetForm) elements.resetForm.addEventListener('submit', handleResetPassword);
+    if (elements.cancelReset) elements.cancelReset.addEventListener('click', () => {
+        elements.resetForm.classList.add('hidden');
+        switchTab('loginTab');
+    });
     if (elements.studentProfileForm) elements.studentProfileForm.addEventListener('submit', handleStudentProfileUpdate);
     elements.studentRegisterForm.addEventListener("submit", handleRegistration);
     elements.adminRegisterForm.addEventListener("submit", handleAdminRegistration);
@@ -273,6 +295,38 @@ function bindEvents() {
 function handleUpdateStudentSearch() {
     appState.currentUpdateStudentFilter = elements.updateStudentSearch.value.trim().toLowerCase();
     renderProfileStudentSuggestions();
+}
+
+async function handleForgotPassword(event) {
+    event.preventDefault();
+    const email = elements.forgotEmail.value.trim().toLowerCase();
+    if (!email) { showToast('Enter your email'); return; }
+    try {
+        const res = await apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+        showToast(res.message || 'Reset token sent');
+        // If token returned (console fallback), prefill reset form
+        if (res.token) {
+            elements.resetToken.value = res.token;
+            elements.resetForm.classList.remove('hidden');
+        }
+    } catch (err) {
+        showToast(err.message || 'Failed to request reset');
+    }
+}
+
+async function handleResetPassword(event) {
+    event.preventDefault();
+    const token = elements.resetToken.value.trim();
+    const password = elements.resetPassword.value.trim();
+    if (!token || !password) { showToast('Provide token and new password'); return; }
+    try {
+        const res = await apiRequest('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+        showToast(res.message || 'Password reset successful');
+        elements.resetForm.classList.add('hidden');
+        switchTab('loginTab');
+    } catch (err) {
+        showToast(err.message || 'Reset failed');
+    }
 }
 
     if (elements.userSearch) {

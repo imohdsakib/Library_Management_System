@@ -209,6 +209,19 @@ async function ensureSchema() {
   if (collectedUptoColumn.length === 0) {
     await pool.query("ALTER TABLE issues ADD COLUMN collected_upto DATE NULL");
   }
+
+  // password_resets table for forgot-password flow
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(190) NOT NULL,
+      token VARCHAR(255) NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      used TINYINT(1) NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
 }
 
 async function ensureDefaultAdmin() {
@@ -375,9 +388,32 @@ async function updateAdmin(id, name, email, phone, passwordHash) {
   return getAdminById(id);
 }
 
+async function updateAdminPasswordByEmail(email, passwordHash) {
+  const result = await query("UPDATE admins SET password_hash = ? WHERE email = ?", [passwordHash, email.toLowerCase()]);
+  return result.affectedRows > 0;
+}
+
 async function getAdminById(id) {
   const rows = await query("SELECT * FROM admins WHERE id = ? LIMIT 1", [Number(id)]);
   return rows[0] || null;
+}
+
+async function createPasswordReset(email, token, expiresAt) {
+  const result = await query(
+    "INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)",
+    [email.toLowerCase(), token, expiresAt]
+  );
+  return { id: result.insertId, email: email.toLowerCase(), token, expiresAt };
+}
+
+async function getPasswordResetByToken(token) {
+  const rows = await query("SELECT * FROM password_resets WHERE token = ? LIMIT 1", [token]);
+  return rows[0] || null;
+}
+
+async function markPasswordResetUsed(token) {
+  const result = await query("UPDATE password_resets SET used = 1 WHERE token = ?", [token]);
+  return result.affectedRows > 0;
 }
 
 async function createAdmin(name, email, passwordHash, phone) {
@@ -948,4 +984,8 @@ module.exports = {
   returnIssue,
   collectFine,
   getReportSummary
+  , createPasswordReset
+  , getPasswordResetByToken
+  , markPasswordResetUsed
+  , updateAdminPasswordByEmail
 };

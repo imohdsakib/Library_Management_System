@@ -6,6 +6,9 @@ const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
+const crypto = require('crypto');
+const storeHelpers = require('../lib/mysqlStore');
+
 router.post("/register-admin", async (req, res) => {
   const { name, email, password, phone } = req.body;
 
@@ -64,6 +67,56 @@ router.post("/login", async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ message: "Login failed", error: err.message });
+  }
+});
+
+// Forgot password - create reset token and (console) send link
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ message: 'email is required' });
+
+  try {
+    const admin = await store.getAdmin(email);
+    if (!admin) return res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
+
+    // generate token
+    const token = crypto.randomBytes(24).toString('hex');
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+
+    await store.createPasswordReset(admin.email, token, expiresAt);
+
+    // Build reset link (frontend will accept token)
+    const resetLink = `${process.env.FRONTEND_URL || ''}/frontend/index.html?reset=${token}`;
+
+    // For now, console fallback: log the link and also return token in response for convenience
+    console.log(`[AUTH] Password reset for ${admin.email}: ${resetLink}`);
+
+    return res.json({ message: 'Password reset initiated. Check logs or use the token to reset.', token });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to create reset token', error: err.message });
+  }
+});
+
+// Reset password using token
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password) return res.status(400).json({ message: 'token and password are required' });
+
+  try {
+    const resetRow = await store.getPasswordResetByToken(token);
+    if (!resetRow) return res.status(400).json({ message: 'Invalid token' });
+    if (resetRow.used) return res.status(400).json({ message: 'Token already used' });
+    if (new Date(resetRow.expires_at) < new Date()) return res.status(400).json({ message: 'Token expired' });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    // update admin password by email
+    const updated = await store.updateAdminPasswordByEmail(resetRow.email, passwordHash);
+    if (!updated) return res.status(500).json({ message: 'Failed to update password' });
+
+    await store.markPasswordResetUsed(token);
+    return res.json({ message: 'Password reset successful' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Reset failed', error: err.message });
   }
 });
 

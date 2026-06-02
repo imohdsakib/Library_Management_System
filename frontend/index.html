@@ -38,9 +38,38 @@
 								<input type="password" id="loginPassword" placeholder="Enter admin password" required>
 							</label>
 							<button type="submit" class="btn btn-primary login-btn">Login</button>
+							<div class="form-note">
+								<a href="#" id="forgotPasswordLink">Forgot password?</a>
+							</div>
 						</form>
 					</div>
 				</div>
+
+					<div id="forgotTab" class="tab-content hidden">
+						<h3>Reset Password</h3>
+						<form id="forgotForm" class="form-grid compact">
+							<label>Enter your admin email
+								<input type="email" id="forgotEmail" required>
+							</label>
+							<div class="btn-row">
+								<button type="submit" class="btn btn-primary">Send Reset Token</button>
+								<button type="button" id="backToLogin" class="btn btn-light">Back</button>
+							</div>
+						</form>
+
+						<form id="resetForm" class="form-grid compact hidden">
+							<label>Reset Token
+								<input type="text" id="resetToken">
+							</label>
+							<label>New Password
+								<input type="password" id="resetPassword">
+							</label>
+							<div class="btn-row">
+								<button type="submit" class="btn btn-primary">Reset Password</button>
+								<button type="button" id="cancelReset" class="btn btn-light">Cancel</button>
+							</div>
+						</form>
+					</div>
 
 
 
