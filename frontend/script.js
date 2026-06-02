@@ -379,7 +379,13 @@ function switchTab(tabId) {
     });
 
     elements.tabContents.forEach((content) => {
-        content.classList.toggle("active", content.id === tabId);
+        if (content.id === tabId) {
+            content.classList.add('active');
+            content.classList.remove('hidden');
+        } else {
+            content.classList.remove('active');
+            content.classList.add('hidden');
+        }
     });
 }
 
