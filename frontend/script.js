@@ -315,6 +315,16 @@ async function handleForgotPassword(event) {
     try {
         const res = await apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
         showToast(res.message || 'Reset token sent');
+        // If backend returned a preview URL (Ethereal) open it so developer can view the email
+        if (res.previewUrl) {
+            try {
+                window.open(res.previewUrl, '_blank');
+                showToast('Opened email preview in a new tab');
+            } catch (e) {
+                console.log('Preview URL:', res.previewUrl);
+            }
+        }
+
         // If token returned (console fallback), prefill reset form
         if (res.token) {
             elements.resetToken.value = res.token;

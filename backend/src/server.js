@@ -1,6 +1,7 @@
 require("dotenv").config({ override: true });
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 const store = require("./lib/mysqlStore");
 
 const authRoutes = require("./routes/auth.routes");
@@ -13,6 +14,10 @@ const app = express();
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json());
+
+// Serve the frontend from the backend so reset links can land on a real page
+const frontendDir = path.resolve(__dirname, "../../frontend");
+app.use(express.static(frontendDir));
 
 // simple request logger for debugging
 app.use((req, res, next) => {

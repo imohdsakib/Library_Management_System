@@ -105,14 +105,36 @@ router.post('/forgot-password', async (req, res) => {
 
     await store.createPasswordReset(admin.email, token, expiresAt);
 
-    // Build reset link (frontend reset page accepts ?token=...)
-    const resetLink = `${process.env.FRONTEND_URL || ''}/reset.html?token=${token}`;
+    // Build absolute reset link so email clients don't resolve it against their own domain
+    const frontendBase = (process.env.FRONTEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+    const resetLink = `${frontendBase}/reset.html?token=${token}`;
 
-    // Try to send email if mailer configured
-    if (mailer) {
-      try {
-        const fromAddr = process.env.EMAIL_FROM || process.env.SMTP_USER;
-        await mailer.sendMail({
+    // Try to send email using configured SMTP. If not configured and not in
+    // production, create an Ethereal test account so developers can preview
+    // the message via a preview URL.
+    try {
+      let transporter = mailer;
+      let usedEthereal = false;
+
+      if (!transporter && (process.env.NODE_ENV || '').toLowerCase() !== 'production') {
+        // create an Ethereal test account on demand
+        const testAccount = await nodemailer.createTestAccount();
+        transporter = nodemailer.createTransport({
+          host: testAccount.smtp.host,
+          port: testAccount.smtp.port,
+          secure: testAccount.smtp.secure,
+          auth: {
+            user: testAccount.user,
+            pass: testAccount.pass
+          }
+        });
+        usedEthereal = true;
+        console.log('[AUTH] Using Ethereal test account for password reset (dev)');
+      }
+
+      if (transporter) {
+        const fromAddr = process.env.EMAIL_FROM || process.env.SMTP_USER || 'no-reply@library.local';
+        const info = await transporter.sendMail({
           from: fromAddr,
           to: admin.email,
           subject: 'Library Management System - Password Reset',
@@ -122,11 +144,17 @@ router.post('/forgot-password', async (req, res) => {
         });
 
         console.log(`[AUTH] Sent password reset email to ${admin.email}`);
+
+        if (usedEthereal) {
+          const previewUrl = nodemailer.getTestMessageUrl(info);
+          return res.json({ message: 'Password reset email sent (ethereal).', previewUrl });
+        }
+
         return res.json({ message: 'Password reset email sent. Check your inbox.' });
-      } catch (mailErr) {
-        console.error('[AUTH] Failed to send reset email', mailErr && mailErr.message);
-        // fallback to console/logging below
       }
+    } catch (mailErr) {
+      console.error('[AUTH] Failed to send reset email', mailErr && mailErr.message);
+      // fallback to console/logging below
     }
 
     // Console fallback for development: log the link and return token for convenience
